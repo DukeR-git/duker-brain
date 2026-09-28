@@ -24,6 +24,34 @@ export const DEFAULT_MODEL = "jev-latest";
 /** Read when `BRAIN_DECISIONS_API_KEY` is unset - the name TypeSafe's own docs use. */
 export const TYPESAFE_KEY_ENV = "TYPESAFE_API_KEY";
 
+/**
+ * Claude Code plugin options (`userConfig` in .claude-plugin/plugin.json) and
+ * the `BRAIN_*` variable each one stands in for. Claude Code exports option KEY
+ * to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`, and the plugin's MCP server entry
+ * passes the same names, so both processes see the options the same way.
+ */
+export const PLUGIN_OPTIONS: Readonly<Record<string, string>> = {
+	CLAUDE_PLUGIN_OPTION_VAULT_ROOT: "BRAIN_VAULT_ROOT",
+	CLAUDE_PLUGIN_OPTION_API_KEY: "BRAIN_DECISIONS_API_KEY",
+	CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "BRAIN_DECISIONS_URL",
+};
+
+/**
+ * Copy each non-empty plugin option onto its `BRAIN_*` variable, unless that
+ * variable is already set. Options that were left empty in the plugin dialog
+ * change nothing, so the config files and the user's own environment still
+ * apply. Mutates and returns `env`; outside Claude Code it is a no-op.
+ */
+export function applyPluginOptions(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+	for (const [option, target] of Object.entries(PLUGIN_OPTIONS)) {
+		const value = env[option]?.trim();
+		// An unsubstituted `${user_config.x}` means the option was never set.
+		if (!value || value.startsWith("${")) continue;
+		if (!env[target]?.trim()) env[target] = value;
+	}
+	return env;
+}
+
 /** The key from `BRAIN_DECISIONS_API_KEY`, else `TYPESAFE_API_KEY`, else the file value. */
 export function resolveApiKey(env: NodeJS.ProcessEnv, fromFile?: string): string | undefined {
 	return envString(env, "BRAIN_DECISIONS_API_KEY", "") || envString(env, TYPESAFE_KEY_ENV, "") || fromFile || undefined;

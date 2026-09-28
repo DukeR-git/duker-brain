@@ -1,0 +1,16 @@
+{
+  "name": "duker-brain",
+  "owner": {
+    "name": "DukeR-git",
+    "url": "https://github.com/DukeR-git"
+  },
+  "description": "duker-brain: dynamic context routing for Claude Code from an Obsidian vault.",
+  "plugins": [
+    {
+      "name": "duker-brain",
+      "source": "./",
+      "description": "On every prompt, route through your Obsidian vault and add only the note that applies. Includes 17 brain_* tools and the init, status, capture and research commands.",
+      "category": "productivity"
+    }
+  ]
+}

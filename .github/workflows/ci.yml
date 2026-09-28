@@ -36,10 +36,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The Claude Code plugin runs the committed bundles, so they must match the source.
+      - name: Committed dist/ is up to date
+        run: git diff --exit-code --stat -- dist/
       - name: Bundled CLIs start
         run: |
           node dist/brain-traverse.mjs help
           node dist/brain-keeper.mjs help
+      - name: Plugin hook exits quietly without a vault
+        shell: bash
+        run: |
+          out=$(echo '{"session_id":"ci","prompt":"How do I size an asyncpg pool?"}' | BRAIN_VAULT_ROOT= XDG_CONFIG_HOME="$RUNNER_TEMP/xdg" CLAUDE_PLUGIN_DATA="$RUNNER_TEMP/plugin-data" node dist/brain-hook.mjs prompt)
+          test -z "$out"
 
   host-laya:
     name: host-laya (API layer, no GPU)

@@ -20,8 +20,20 @@ import { IGNORE_FILE, compileVault, type CompileResult } from "../../brain-core/
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** The fixture vault doubles as the example: three branches, nine leaves. */
-export const EXAMPLE_VAULT = resolve(here, "..", "..", "pi-traverser", "fixtures", "vault");
+/**
+ * The fixture vault doubles as the example: three branches, nine leaves.
+ * Found by walking up from this file, because it runs both from source
+ * (brain-keeper/src/) and bundled (dist/, as the Claude Code plugin does).
+ */
+export const EXAMPLE_VAULT = findUp(here, join("pi-traverser", "fixtures", "vault")) ?? resolve(here, "..", "..", "pi-traverser", "fixtures", "vault");
+
+function findUp(from: string, relative: string): string | undefined {
+	for (let dir = from; ; dir = dirname(dir)) {
+		const candidate = join(dir, relative);
+		if (existsSync(candidate)) return candidate;
+		if (dirname(dir) === dir) return undefined;
+	}
+}
 
 const FALLBACK_NOTE = `---
 id: general_instructions

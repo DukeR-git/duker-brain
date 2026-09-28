@@ -16,7 +16,6 @@
  * `@earendil-works/pi-coding-agent` or under another scope.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -29,7 +28,10 @@ import type { TraversalResult } from "../../brain-core/src/types.js";
 import { compileVault, scanVault } from "../../brain-core/src/vault.js";
 import { loadEvalSuite, renderEvalReport, runEvalSuite } from "../../brain-core/src/eval.js";
 import { describeConfig, loadConfig, type BrainConfig } from "./config.js";
-import { CUSTOM_TYPE, formatInjection, formatReminder, formatStatus, formatTrace } from "./inject.js";
+import { CUSTOM_TYPE, formatStatus, formatTrace } from "./inject.js";
+import { isTrivialFollowUp, planInjection, type InjectedGuide } from "./session.js";
+
+export { isTrivialFollowUp };
 
 // Structural stand-ins for Pi's types: enough to be type-safe here without
 // pinning a package name this project does not depend on.
@@ -107,19 +109,6 @@ const FAILURES_BEFORE_DOWN = 2;
 const ROUTE_CACHE_MS = 2 * 60_000;
 const ROUTE_CACHE_SIZE = 32;
 
-/**
- * Trivial follow-up prompts that need no background manual (a one-word
- * confirmation, a greeting, "continue"). Short-circuiting them locally saves
- * the gate request, network round-trip, and avoids injecting noise.
- */
-const TRIVIAL_PROMPT =
-	/^(?:yes|yep|yeah|no|nope|ok|okay|sure|thanks|thank you|continue|proceed|go ahead|done|next|agree|looks good|lgtm)[.!]?$/i;
-
-export function isTrivialFollowUp(prompt: string): boolean {
-	const cleaned = prompt.replace(/\s+/g, " ").trim();
-	return TRIVIAL_PROMPT.test(cleaned);
-}
-
 const SUBCOMMANDS = ["status", "trace", "reload", "rebuild", "stats", "eval", "on", "off", "config", "help"];
 
 export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOptions = {}): void {
@@ -144,7 +133,7 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 
 	// Session memory: which guides are already in the conversation, and recent routes.
 	let turn = 0;
-	const injected = new Map<string, { turn: number; hash: string }>();
+	const injected = new Map<string, InjectedGuide>();
 	const routeCache = new Map<string, { at: number; result: TraversalResult }>();
 
 	const notify = (text: string, level = "info") => {
@@ -309,53 +298,14 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 			consecutiveFailures = 0;
 		}
 
-		const docs =
-			result.documents && result.documents.length > 0
-				? result.documents
-				: result.document
-					? [result.document]
-					: [];
-		if (docs.length === 0) return undefined;
-
 		// The same, unchanged guide injected a few turns ago is still in the
 		// conversation: send a one-line reminder instead of another full copy.
-		const window = state.config.reinjectAfterTurns;
-		const docHashes = docs.map((doc) => ({
-			doc,
-			hash: createHash("sha1").update(doc.content).digest("hex"),
-		}));
-
-		const repeatStatuses = docHashes.map(({ doc, hash }) => {
-			const previous = injected.get(doc.path);
-			const repeat = window > 0 && previous !== undefined && previous.hash === hash && turn - previous.turn < window;
-			return { doc, hash, repeat, previous };
-		});
-
-		const anyRepeat = repeatStatuses.some((r) => r.repeat);
-
-		let content: string | null = null;
-
-		if (!anyRepeat) {
-			content = formatInjection(result);
-			for (const { doc, hash } of docHashes) {
-				injected.set(doc.path, { turn, hash });
-			}
-		} else {
-			const blocks: string[] = [];
-			for (const { doc, hash, repeat, previous } of repeatStatuses) {
-				const singleRes: TraversalResult = { ...result, document: doc, documents: [doc] };
-				if (repeat && previous) {
-					const reminder = formatReminder(singleRes, turn - previous.turn);
-					if (reminder) blocks.push(reminder);
-				} else {
-					const injection = formatInjection(singleRes);
-					if (injection) blocks.push(injection);
-					injected.set(doc.path, { turn, hash });
-				}
-			}
-			content = blocks.length > 0 ? blocks.join("\n\n") : null;
-		}
-
+		const { content, repeat: anyRepeat, documents: docs } = planInjection(
+			result,
+			injected,
+			turn,
+			state.config.reinjectAfterTurns,
+		);
 		if (!content) return undefined;
 
 		return {

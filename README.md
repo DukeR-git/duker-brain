@@ -12,10 +12,10 @@ enormous system prompt.
 Two hops, typically well under a second, and the agent sees the one guide it needs.
 
 ```
-                 ┌────────────────────────────────────────┐
-  prompt ───────>│ router (Pi extension)                  │
-                 │   gate + hop 1 ──> hop 2 ──> leaf .md  │──> injected as a message
-                 └──────┬───────────────────────┬─────────┘
+                 ┌─────────────────────────────────────────┐
+  prompt ───────>│ router (Pi extension / Claude Code hook)│
+                 │   gate + hop 1 ──> hop 2 ──> leaf .md   │──> injected as context
+                 └──────┬───────────────────────┬──────────┘
                         │ POST /v1/systemone    │ reads _index.json
                         v                       v
           ┌──────────────────────────┐   ┌──────────────────┐
@@ -28,12 +28,13 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
                                          └──────────────────┘
 ```
 
-- **Router**: a [Pi](https://pi.dev) extension. It routes each prompt through the
-  vault and appends the matching note to the conversation. Supports parallel composite
+- **Router**: a [Claude Code](https://code.claude.com) plugin hook and a [Pi](https://pi.dev)
+  extension. It routes each prompt through the vault and adds the matching note
+  to the conversation. Supports parallel composite
   routing for cross-cutting queries under a unified context budget.
 - **Keeper**: 17 `brain_*` tools for adding to, searching, maintaining, evaluating and
-  exporting the brain, plus `/brain-capture`, `/brain-research`, and `/brain-export`. They are native tools in Pi,
-  and an MCP server for Claude Code, Codex and any other MCP client.
+  exporting the brain, plus commands to capture and research knowledge into it. They
+  are native tools in Pi, and an MCP server for Claude Code, Codex and any other MCP client.
 - **Decisions API**: the hosted [TypeSafe Jev](https://docs.typesafe.ai) API by
   default, which needs nothing installed besides an API key. A self-hosted
   [Laya](https://pypi.org/project/laya/) server works too (see [host-laya](host-laya)).
@@ -42,8 +43,44 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
 
 ## Install
 
-You need Node.js 22 or newer, and a TypeSafe API key from
+You need Node.js 22 or newer on your `PATH`, and a TypeSafe API key from
 [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
+
+### Claude Code (plugin)
+
+Inside Claude Code:
+
+```
+/plugin marketplace add DukeR-git/duker-brain
+/plugin install duker-brain@duker-brain
+```
+
+When you enable the plugin, it asks for three optional settings: the vault
+folder, your API key (kept in your system's secure credential store) and the
+decisions API URL. Leave them empty to use `TYPESAFE_API_KEY` and the config
+file instead. Then create a brain and check that routing works:
+
+```
+/duker-brain:init ~/brain --example
+/duker-brain:status
+```
+
+From then on every prompt is routed, and the matching note is added as context.
+When a note goes in, Claude Code shows one line such as
+`brain: asyncpg_pooling 0.93 53ms`; set `displayInjection` to `false` to hide
+it. You also get the 17 `brain_*` tools and four commands:
+
+| Command | What it does |
+|---|---|
+| `/duker-brain:init <dir> [--example]` | Create a brain, or adopt an existing Obsidian vault, and make it the default |
+| `/duker-brain:status` | Settings, service health and what the last prompt routed to |
+| `/duker-brain:capture` | File what is worth keeping from this session into the brain |
+| `/duker-brain:research <topic>` | Research a topic and write it up as a note |
+
+The plugin runs prebuilt bundles from [dist](dist), so nothing is installed
+besides the plugin itself. Its state (which notes each conversation already
+holds) lives in Claude Code's plugin data folder. After `/compact` or `/clear`,
+the next prompt gets the full note again.
 
 ### Pi
 
@@ -73,10 +110,10 @@ are not knowledge (Templates, Attachments, Daily Notes) in the vault's
 `.brainignore`. Run `brain_doctor` (or `brain-keeper doctor`) afterwards to see
 what the notes still need.
 
-### Claude Code, Codex and other MCP clients
+### Codex and other MCP clients
 
 These harnesses get the keeper: the tools and the two commands. Automatic
-routing on every prompt is currently implemented only for Pi.
+routing on every prompt is available for Claude Code (above) and Pi.
 
 ```bash
 git clone https://github.com/DukeR-git/duker-brain
@@ -89,9 +126,11 @@ node brain-keeper/bin/brain-keeper.mjs setup
 `setup` prints the exact commands for this checkout, for example:
 
 ```bash
-claude mcp add brain --scope user -- node /path/to/duker-brain/brain-keeper/bin/brain-keeper.mjs serve
 codex mcp add brain -- node /path/to/duker-brain/brain-keeper/bin/brain-keeper.mjs serve
 ```
+
+To give Claude Code only the tools, without routing, use the same command
+with `claude mcp add brain --scope user`.
 
 It also says where to copy the two command files. See
 [brain-keeper/commands](brain-keeper/commands/README.md).
@@ -179,7 +218,9 @@ still the best undo.
 
 | Folder | What it is |
 |---|---|
-| [pi-traverser](pi-traverser) | The router: the Pi extension plus the `brain-traverse` CLI for tuning routes without launching Pi. |
+| [pi-traverser](pi-traverser) | The router: the Pi extension, the Claude Code hook, and the `brain-traverse` CLI for tuning routes without launching an agent. |
+| [.claude-plugin](.claude-plugin), [claude-plugin](claude-plugin) | The Claude Code plugin and marketplace manifests, and the plugin's own commands. |
+| [dist](dist) | Self-contained bundles of the CLIs and the hook, built by `npm run build` and committed, because the plugin runs them without an install. |
 | [brain-keeper](brain-keeper) | The authoring tools: Pi tools, the MCP server, the `brain-keeper` CLI and the two commands. |
 | [brain-core](brain-core) | Shared by both: vault schema, frontmatter parser, compiler, traversal engine and decisions client. |
 | [host-laya](host-laya) | Optional self-hosted decisions service (Python and Docker, hardware-specific). |
@@ -216,12 +257,12 @@ node brain-keeper/bin/brain-keeper.mjs tree --criteria
 npm install
 npm test            # all three packages
 npm run typecheck
-npm run build       # bundle standalone dist/ CLIs with esbuild
+npm run build       # rebuild the self-contained dist/ bundles (commit the result)
 ```
 
 ```
-brain-core     167   vault model, compiler, config, traversal, cache, evals, exporter
-pi-traverser    51   the Pi extension, injection formatting, config, eval & route CLI
+brain-core     171   vault model, compiler, config, traversal, cache, evals, exporter
+pi-traverser    71   the Pi extension, the Claude Code hook, injection formatting, config, CLI
 brain-keeper    84   operations, the 17-tool surface, Pi registration, export, MCP server
 host-laya       22   the HTTP layer against a stub engine (pytest; no torch needed)
 ```

@@ -1,6 +1,6 @@
 # pi-traverser — the router (Part 2)
 
-The traversal engine and the Pi extension. Takes the user's prompt, walks the
+The traversal engine, the Pi extension and the Claude Code hook. Takes the user's prompt, walks the
 Obsidian vault by asking a decisions API (the hosted TypeSafe Jev API by default,
 or a self-hosted Laya) to pick a child at each level, and injects the matching
 reference guide into the agent's context.
@@ -196,6 +196,28 @@ Pi loads TypeScript through `jiti`, so there is no build step.
 
 The footer shows a live status line: `brain: asyncpg_pooling 0.94 68ms`.
 
+### In Claude Code
+
+The same router runs as the duker-brain plugin's hooks (see the
+[root README](../README.md#claude-code-plugin) for installing it). Claude Code
+starts `dist/brain-hook.mjs` afresh for every prompt, so the session memory the
+Pi extension holds in memory lives in files in the plugin's data folder:
+`sessions/<session_id>.json` (which guides the conversation holds) and
+`breaker.json` (the service pause). The behaviour matches Pi's:
+
+- the guide is added with `additionalContext`, and a one-line `systemMessage`
+  shows the status when a guide goes in (`displayInjection`)
+- an unchanged guide sent within `reinjectAfterTurns` becomes a reminder, and
+  `SessionStart` after `/compact` or `/clear` resets that memory
+- trivial follow-ups are not routed, and two decision failures in a row pause
+  routing for 15 s, doubling to 5 min; the next prompt after the pause is the probe
+- Claude Code caps hook output at 10,000 characters, so under the hook
+  `maxDocumentChars` is limited to 8,500
+
+The hook always exits 0 and stops itself after 8 s, inside the plugin's 10 s
+timeout, so a slow or broken service costs the prompt its guide, never the
+prompt itself. `/duker-brain:status` prints what it last saw.
+
 ## 6. Configuration
 
 Resolved from defaults, then `~/.config/brain-traverse/config.json` (the user
@@ -288,11 +310,14 @@ For an end-to-end check against the real service, run the CLI with a key set
 pi-traverser/
 ├── index.ts                   Pi entry point (re-exports the factory; listed in the root pi manifest)
 ├── src/
-│   ├── extension.ts           the factory: hooks, health back-off, session memory, /brain command
+│   ├── extension.ts           the Pi factory: hooks, health back-off, /brain command
+│   ├── claude-hook.ts         the Claude Code hooks: prompt, session start, status
+│   ├── session.ts             per-session memory shared by both: inject or remind
 │   ├── inject.ts              injection block, reminder and trace formatting
 │   └── config.ts              re-exports brain-core's shared config loader
 ├── bin/brain-traverse.mjs     CLI launcher (registers tsx, runs brain-traverse.ts)
 ├── bin/brain-traverse.ts      the CLI
+├── bin/brain-hook.ts          the Claude Code hook command (bundled to dist/brain-hook.mjs)
 ├── fixtures/vault/            test vault, shared by all three packages
 └── test/                      the Pi extension and config suites
 ```

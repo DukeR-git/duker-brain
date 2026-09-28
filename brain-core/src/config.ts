@@ -82,7 +82,7 @@ export interface BrainConfig {
 
 	/** Re-read `_index.json` when it changes on disk. Disable for a read-only vault. */
 	watchManifests: boolean;
-	/** Show the injected reference block in the Pi TUI. */
+	/** Show the injected reference block in the Pi TUI, and a one-line status in Claude Code when a note goes in. */
 	displayInjection: boolean;
 	/**
 	 * Do not inject the same unchanged guide again within this many turns; a

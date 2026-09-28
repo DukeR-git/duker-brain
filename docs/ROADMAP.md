@@ -4,19 +4,19 @@ Ideas that are planned or being considered. None of it is promised, and the
 order is a rough priority. If you want to work on one, open an issue first so
 the design can be agreed before the code.
 
+Shipped since 1.0.0: the Claude Code plugin with automatic routing.
+
 Already shipped in 1.0.0: routing evals (`brain-traverse eval`), the route
 cache, rules export (`brain-keeper export`) and composite multi-document
 routing. See [CHANGELOG.md](../CHANGELOG.md).
 
 ## Next
 
-- **Automatic routing outside Pi.** Claude Code, Codex and other MCP clients get
-  the keeper tools but not per-prompt routing. A Claude Code `UserPromptSubmit`
-  hook that runs `brain-traverse route` and injects the note would cover the
-  largest group of users.
+- **Automatic routing in Codex** and other harnesses with a prompt hook, reusing
+  the Claude Code hook (`pi-traverser/src/claude-hook.ts`).
 - **Installable without cloning.** Publish to npm so MCP users can run
-  `npx brain-keeper serve`. This needs `brain-core` to stop being imported by
-  relative path, or the `dist/` bundles to become the published entry points.
+  `npx brain-keeper serve`. The self-contained `dist/` bundles can be the
+  published entry points.
 - **Linting and formatting** for the TypeScript (Biome, or ESLint and Prettier)
   and Python (`ruff`), enforced in CI.
 - **host-laya beyond Intel Arc.** CUDA and CPU compose profiles, and Apple

@@ -21,7 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { numberFlag, parseArgs, runMain, type Args } from "../../brain-core/src/cli.js";
-import { userConfigPath } from "../../brain-core/src/env.js";
+import { applyPluginOptions, userConfigPath } from "../../brain-core/src/env.js";
 import { withVaultLock } from "../../brain-core/src/fsutil.js";
 import { MANIFEST_FILE } from "../../brain-core/src/manifest.js";
 import { compileVault } from "../../brain-core/src/vault.js";
@@ -138,6 +138,9 @@ async function watchVault(config: KeeperConfig): Promise<number> {
 }
 
 async function main(): Promise<number> {
+	// Launched by the Claude Code plugin, the options from its settings dialog
+	// arrive as CLAUDE_PLUGIN_OPTION_* variables; elsewhere this does nothing.
+	applyPluginOptions(process.env);
 	const args = parseArgs(process.argv.slice(2), VALUE_FLAGS);
 
 	switch (args.command) {
@@ -292,6 +295,10 @@ needs the decisions API key in the server's environment when you route through
 Jev${needsKey ? " (none is set in this shell)" : ""}; the commands below pass it.
 
 Claude Code
+  Easiest: install the plugin, which adds automatic routing as well:
+    /plugin marketplace add DukeR-git/duker-brain
+    /plugin install duker-brain@duker-brain
+  Or only the tools, from this checkout:
   claude mcp add brain --scope user -e TYPESAFE_API_KEY=<your key> -- node ${quote(launcher)} serve
   commands: copy ${quote(commands)} into ~/.claude/commands/
 
