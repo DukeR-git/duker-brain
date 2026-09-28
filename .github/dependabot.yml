@@ -42,12 +42,8 @@ updates:
       - dependency-name: "tcmlib"
       - dependency-name: "umf"
 
-  # The base image stays on the Ubuntu LTS the Intel GPU packages are built for.
-  # Patch updates of that release still come through.
-  - package-ecosystem: docker
-    directory: /host-laya
-    schedule:
-      interval: monthly
-    ignore:
-      - dependency-name: "ubuntu"
-        update-types: ["version-update:semver-major"]
+  # No docker entry on purpose. host-laya's only base image is ubuntu:24.04, the
+  # LTS the Intel GPU packages are built for, and its point releases ship under
+  # that same tag. Every tag Dependabot could propose is a different release
+  # (24.10, 26.04), and moving to one means re-resolving the torch XPU stack
+  # and testing on Arc hardware, so it is done by hand.
