@@ -8,7 +8,7 @@
 #   2. CONTAINER: the Intel user-space compute runtime (Level Zero + OpenCL ICD)
 #      and a torch built against XPU. Both are installed below.
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/xpu
