@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-28
+
 ### Added
 
 - **Starter and shared brains.** `brain-keeper add <source>` adds a ready-made
@@ -82,6 +84,7 @@ First public release.
 - **host-laya**: an optional, Jev-compatible FastAPI decisions service around a
   local Laya checkpoint, containerised for Intel Arc GPUs.
 
-[Unreleased]: https://github.com/DukeR-git/duker-brain/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DukeR-git/duker-brain/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/DukeR-git/duker-brain/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DukeR-git/duker-brain/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DukeR-git/duker-brain/releases/tag/v1.0.0

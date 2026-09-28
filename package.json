@@ -1,6 +1,6 @@
 {
   "name": "brain-traverse",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Dynamic context routing for coding agents: walks a hierarchical Obsidian vault with a System-1 decision model (TypeSafe Jev or a self-hosted Laya) and injects only the reference note that applies. A Pi package, plus an MCP server for Claude Code, Codex and others.",
   "type": "module",

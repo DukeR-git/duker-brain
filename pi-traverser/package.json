@@ -1,6 +1,6 @@
 {
   "name": "brain-traverse-pi",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "The Pi extension half of brain-traverse: routes each prompt through the vault and injects the matching reference note. Installed via the repository root's pi manifest.",
   "author": "DukeR-git",
