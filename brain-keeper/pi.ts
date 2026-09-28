@@ -11,11 +11,21 @@
  * which keeps error messages identical across harnesses.
  */
 
+import { existsSync } from "node:fs";
+
 import * as z from "zod";
 
-import { LazyConfig, loadConfig, type LoadOptions } from "./src/config.js";
+import { parseArgs } from "../brain-core/src/cli.js";
+import { addBrain, renderAdd, renderStarters, renderUpdate, updateBrains } from "./src/brains.js";
+import { LazyConfig, loadConfig, requireVault, type LoadOptions } from "./src/config.js";
 import { initVault, renderInit } from "./src/init.js";
 import { TOOLS, labelFor, runTool } from "./src/tools.js";
+
+/** A slash command's argument string, parsed like the CLI's flags. */
+function commandArgs(args: string, valueFlags: string[]): { positional: string[]; flags: Record<string, string | boolean> } {
+	const { positional, flags } = parseArgs(["command", ...args.trim().split(/\s+/).filter(Boolean)], new Set(valueFlags));
+	return { positional, flags };
+}
 
 // Structural stand-in for Pi's ExtensionAPI: only what this file calls.
 interface PiToolResult {
@@ -70,27 +80,68 @@ export default function brainKeeper(pi: PiExtensionAPI, options: KeeperExtension
 	}
 
 	pi.registerCommand("brain-init", {
-		description: "Create a brain vault and make it the default: /brain-init <dir> [--example] [--dry-run]",
+		description: "Create a brain vault and make it the default: /brain-init <dir> [--example] [--starter <name>] [--dry-run]",
 		handler: (args, ctx) => {
-			const parts = args.trim().split(/\s+/).filter(Boolean);
-			const dir = parts.find((part) => !part.startsWith("--"));
+			const { positional, flags } = commandArgs(args, ["starter"]);
+			const dir = positional[0];
 			if (!dir) {
-				ctx.ui.notify("usage: /brain-init <dir> [--example] [--dry-run]   e.g. /brain-init ~/brain --example", "warn");
+				ctx.ui.notify("usage: /brain-init <dir> [--example] [--starter <name>] [--dry-run]   e.g. /brain-init ~/brain --starter python-backend", "warn");
 				return;
 			}
 			try {
-				const dryRun = parts.includes("--dry-run");
+				const dryRun = flags["dry-run"] === true;
 				const result = initVault({
 					dir,
-					example: parts.includes("--example"),
+					example: flags.example === true,
 					dryRun,
 					cwd: ctx.cwd,
 					env: options.env,
 				});
+				let text = renderInit(result);
+				if (typeof flags.starter === "string") {
+					const added = addBrain({ vaultRoot: result.vaultRoot, source: flags.starter, dryRun: dryRun || !existsSync(result.vaultRoot) });
+					text += `\n\n${renderAdd(added)}`;
+				}
 				if (!dryRun) config = new LazyConfig(() => loadConfig(configOptions));
-				ctx.ui.notify(`${renderInit(result)}${dryRun ? "" : "\n\nRun /brain reload (or /reload) to start routing with it."}`, "info");
+				ctx.ui.notify(`${text}${dryRun ? "" : "\n\nRun /brain reload (or /reload) to start routing with it."}`, "info");
 			} catch (error) {
 				ctx.ui.notify(`brain-init failed: ${(error as Error).message}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("brain-add", {
+		description: "Add a shared brain as its own folder: /brain-add <starter name | owner/repo[/folder][#ref] | git URL> [--as <folder>] [--dry-run]",
+		handler: (args, ctx) => {
+			const { positional, flags } = commandArgs(args, ["as"]);
+			if (!positional[0]) {
+				ctx.ui.notify(`usage: /brain-add <source> [--as <folder>] [--dry-run]\n\n${renderStarters()}`, "warn");
+				return;
+			}
+			try {
+				const result = addBrain({
+					vaultRoot: requireVault(config.get()),
+					source: positional[0],
+					as: typeof flags.as === "string" ? flags.as : undefined,
+					dryRun: flags["dry-run"] === true,
+				});
+				ctx.ui.notify(`${renderAdd(result)}${result.dryRun ? "" : "\n\nRun /brain reload to route with it."}`, "info");
+			} catch (error) {
+				ctx.ui.notify(`brain-add failed: ${(error as Error).message}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("brain-update", {
+		description: "Pull new and changed notes into shared brains, keeping your edits: /brain-update [folder] [--dry-run]",
+		handler: (args, ctx) => {
+			const { positional, flags } = commandArgs(args, []);
+			try {
+				const result = updateBrains({ vaultRoot: requireVault(config.get()), folder: positional[0], dryRun: flags["dry-run"] === true });
+				const failed = result.updates.some((update) => update.error);
+				ctx.ui.notify(`${renderUpdate(result)}${result.dryRun ? "" : "\n\nRun /brain reload to route with the changes."}`, failed ? "warn" : "info");
+			} catch (error) {
+				ctx.ui.notify(`brain-update failed: ${(error as Error).message}`, "error");
 			}
 		},
 	});

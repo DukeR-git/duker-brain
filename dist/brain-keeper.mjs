@@ -549,8 +549,8 @@ function splitFrontmatter(markdown) {
   return { title: note.frontmatter.title, body: note.body };
 }
 function slugify(input) {
-  const slug = input.normalize("NFKD").replace(DIACRITICS, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60).replace(/_+$/, "");
-  if (slug !== "" || input.trim() === "") return slug;
+  const slug2 = input.normalize("NFKD").replace(DIACRITICS, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60).replace(/_+$/, "");
+  if (slug2 !== "" || input.trim() === "") return slug2;
   return `id_${createHash("sha1").update(input.trim()).digest("hex").slice(0, 8)}`;
 }
 function isHashedId(id) {
@@ -8499,21 +8499,21 @@ var init_decisions_client = __esm({
 });
 
 // brain-core/src/cache.ts
-import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync5, readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync6 } from "node:fs";
-import { join as join5 } from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import { existsSync as existsSync6, readdirSync as readdirSync4, readFileSync as readFileSync7, statSync as statSync7 } from "node:fs";
+import { join as join6 } from "node:path";
 function normalizePrompt(prompt) {
   return prompt.toLowerCase().trim().replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").replace(/^[\s.,!?;:()"'`]+|[\s.,!?;:()"'`]+$/g, "");
 }
 function hashPrompt(normalized) {
-  return createHash2("sha256").update(normalized).digest("hex").slice(0, 32);
+  return createHash3("sha256").update(normalized).digest("hex").slice(0, 32);
 }
 function computeVaultFingerprint(vaultRoot) {
   const records = [];
   function scan(dir) {
     let entries;
     try {
-      entries = readdirSync3(dir);
+      entries = readdirSync4(dir);
     } catch {
       return;
     }
@@ -8521,10 +8521,10 @@ function computeVaultFingerprint(vaultRoot) {
       if (name === ".git" || name === "node_modules" || name === ".trash" || name.startsWith(".")) {
         continue;
       }
-      const full = join5(dir, name);
+      const full = join6(dir, name);
       let st;
       try {
-        st = statSync6(full);
+        st = statSync7(full);
       } catch {
         continue;
       }
@@ -8538,7 +8538,7 @@ function computeVaultFingerprint(vaultRoot) {
   }
   scan(vaultRoot);
   records.sort();
-  return createHash2("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
+  return createHash3("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
 }
 var CACHE_FILE, DEFAULT_MAX_CACHE_ENTRIES, RouteCache, defaultRouteCache;
 var init_cache = __esm({
@@ -8630,9 +8630,9 @@ var init_cache = __esm({
         this.currentFingerprint = null;
         this.fingerprintMtime = 0;
         if (vaultRoot) {
-          const diskPath = join5(vaultRoot, CACHE_FILE);
+          const diskPath = join6(vaultRoot, CACHE_FILE);
           try {
-            if (existsSync5(diskPath)) {
+            if (existsSync6(diskPath)) {
               writeFileAtomic(diskPath, JSON.stringify({ version: 1, fingerprint: "", entries: {} }, null, 2));
             }
           } catch {
@@ -8662,10 +8662,10 @@ var init_cache = __esm({
         this.loadFromDisk(vaultRoot);
       }
       loadFromDisk(vaultRoot) {
-        const diskPath = join5(vaultRoot, CACHE_FILE);
-        if (!existsSync5(diskPath)) return;
+        const diskPath = join6(vaultRoot, CACHE_FILE);
+        if (!existsSync6(diskPath)) return;
         try {
-          const content = readFileSync6(diskPath, "utf8");
+          const content = readFileSync7(diskPath, "utf8");
           const parsed = JSON.parse(content);
           if (parsed.version !== 1 || !parsed.entries) return;
           const fp = this.getOrUpdateFingerprint(vaultRoot);
@@ -8678,7 +8678,7 @@ var init_cache = __esm({
         }
       }
       persistToDisk(vaultRoot) {
-        const diskPath = join5(vaultRoot, CACHE_FILE);
+        const diskPath = join6(vaultRoot, CACHE_FILE);
         const entriesObj = {};
         for (const [k, v] of this.memory.entries()) {
           entriesObj[k] = v;
@@ -8699,8 +8699,8 @@ var init_cache = __esm({
 });
 
 // brain-core/src/traverser.ts
-import { readFileSync as readFileSync7 } from "node:fs";
-import { basename as basename3, resolve as resolve7 } from "node:path";
+import { readFileSync as readFileSync8 } from "node:fs";
+import { basename as basename4, resolve as resolve7 } from "node:path";
 function isTrivialFollowUp(state) {
   if (state.length > 40) return false;
   const words = state.toLowerCase().split(/[\s,.!?;:]+/).filter(Boolean);
@@ -9000,7 +9000,7 @@ var init_traverser = __esm({
             optionCount: manifest.entries.length,
             ...typeof actProbability === "number" ? { actProbability } : {}
           });
-          segments.push(entry.type === "leaf" ? basename3(entry.targetPath) : entry.id);
+          segments.push(entry.type === "leaf" ? basename4(entry.targetPath) : entry.id);
           if (confidence < this.config.minConfidence) {
             return this.withFallback(
               finish2,
@@ -9058,7 +9058,7 @@ var init_traverser = __esm({
       readRawDocument(path, entry) {
         let raw;
         try {
-          raw = readFileSync7(path, "utf8");
+          raw = readFileSync8(path, "utf8");
         } catch {
           return null;
         }
@@ -9083,7 +9083,7 @@ var init_traverser = __esm({
         const hops = [];
         const segments = [
           this.manifests.relativeToVault(fromDir) || "Root",
-          entry.type === "leaf" ? basename3(entry.targetPath) : entry.id
+          entry.type === "leaf" ? basename4(entry.targetPath) : entry.id
         ];
         const warnings = [];
         const branchVisited = [...visited];
@@ -9239,7 +9239,7 @@ var init_traverser = __esm({
             optionCount: manifest.entries.length,
             ...typeof actProbability === "number" ? { actProbability } : {}
           });
-          segments.push(chosenEntry.type === "leaf" ? basename3(chosenEntry.targetPath) : chosenEntry.id);
+          segments.push(chosenEntry.type === "leaf" ? basename4(chosenEntry.targetPath) : chosenEntry.id);
           if (confidence < this.config.minConfidence) {
             return {
               entry,
@@ -9416,13 +9416,13 @@ var init_logger = __esm({
 });
 
 // brain-core/src/eval.ts
-import { existsSync as existsSync6, readFileSync as readFileSync8 } from "node:fs";
-import { basename as basename4 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync9 } from "node:fs";
+import { basename as basename5 } from "node:path";
 function loadEvalSuite(filePath) {
-  if (!existsSync6(filePath)) {
+  if (!existsSync7(filePath)) {
     throw new Error(`Eval suite file not found: ${filePath}`);
   }
-  const content = readFileSync8(filePath, "utf8");
+  const content = readFileSync9(filePath, "utf8");
   let parsed;
   if (filePath.endsWith(".json")) {
     try {
@@ -9574,7 +9574,7 @@ function matchesDestination(expected, actualId, actualPath) {
   if (actualPath) {
     const normPath = actualPath.replace(/\\/g, "/");
     if (normPath === normExpected) return true;
-    if (basename4(normPath) === normExpected || basename4(normPath, ".md") === normExpected) return true;
+    if (basename5(normPath) === normExpected || basename5(normPath, ".md") === normExpected) return true;
   }
   return false;
 }
@@ -9645,15 +9645,15 @@ var init_eval = __esm({
 });
 
 // brain-core/src/exporter.ts
-import { mkdirSync as mkdirSync3, readFileSync as readFileSync9 } from "node:fs";
-import { dirname as dirname4, join as join6, resolve as resolve8 } from "node:path";
+import { mkdirSync as mkdirSync4, readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname5, join as join7, resolve as resolve8 } from "node:path";
 async function exportVault(vaultRoot, format, outDir, options = {}) {
   const tree = scanVault(vaultRoot);
   const notes = [];
   function collectLeaves(node2) {
     if (node2.kind === "leaf") {
       try {
-        const raw = readFileSync9(node2.absolutePath, "utf8");
+        const raw = readFileSync10(node2.absolutePath, "utf8");
         const parsed = splitFrontmatter(raw);
         notes.push({
           id: node2.id,
@@ -9678,31 +9678,31 @@ async function exportVault(vaultRoot, format, outDir, options = {}) {
     case "cursor": {
       for (const note of notes) {
         const filename = `${note.id}.mdc`;
-        const targetPath = join6(resolvedOutDir, filename);
+        const targetPath = join7(resolvedOutDir, filename);
         const content = renderCursorMdc(note);
         filesWritten.push(targetPath);
         if (!options.dryRun) {
-          mkdirSync3(dirname4(targetPath), { recursive: true });
+          mkdirSync4(dirname5(targetPath), { recursive: true });
           writeFileAtomic(targetPath, content);
         }
       }
       break;
     }
     case "windsurf": {
-      const targetFile = resolvedOutDir.endsWith(".windsurfrules") ? resolvedOutDir : join6(resolvedOutDir, ".windsurfrules");
+      const targetFile = resolvedOutDir.endsWith(".windsurfrules") ? resolvedOutDir : join7(resolvedOutDir, ".windsurfrules");
       const content = renderWindsurfRules(notes);
       filesWritten.push(targetFile);
       if (!options.dryRun) {
-        mkdirSync3(dirname4(targetFile), { recursive: true });
+        mkdirSync4(dirname5(targetFile), { recursive: true });
         writeFileAtomic(targetFile, content);
       }
       break;
     }
     case "aider": {
-      const docsDir = join6(resolvedOutDir, ".brain-docs");
+      const docsDir = join7(resolvedOutDir, ".brain-docs");
       const relativeDocPaths = [];
       for (const note of notes) {
-        const targetPath = join6(docsDir, note.path);
+        const targetPath = join7(docsDir, note.path);
         const content = `# ${note.title}
 
 ${note.body}
@@ -9710,11 +9710,11 @@ ${note.body}
         filesWritten.push(targetPath);
         relativeDocPaths.push(`.brain-docs/${note.path.replace(/\\/g, "/")}`);
         if (!options.dryRun) {
-          mkdirSync3(dirname4(targetPath), { recursive: true });
+          mkdirSync4(dirname5(targetPath), { recursive: true });
           writeFileAtomic(targetPath, content);
         }
       }
-      const confPath = join6(resolvedOutDir, ".aider.conf.yml");
+      const confPath = join7(resolvedOutDir, ".aider.conf.yml");
       const aiderConfig = [
         "# Aider configuration generated from brain-traverse vault",
         "read:",
@@ -9723,25 +9723,25 @@ ${note.body}
       ].join("\n");
       filesWritten.push(confPath);
       if (!options.dryRun) {
-        mkdirSync3(dirname4(confPath), { recursive: true });
+        mkdirSync4(dirname5(confPath), { recursive: true });
         writeFileAtomic(confPath, aiderConfig);
       }
       break;
     }
     case "bundle": {
       for (const note of notes) {
-        const targetPath = join6(resolvedOutDir, note.path);
+        const targetPath = join7(resolvedOutDir, note.path);
         const content = `# ${note.title}
 
 ${note.body}
 `;
         filesWritten.push(targetPath);
         if (!options.dryRun) {
-          mkdirSync3(dirname4(targetPath), { recursive: true });
+          mkdirSync4(dirname5(targetPath), { recursive: true });
           writeFileAtomic(targetPath, content);
         }
       }
-      const indexPath = join6(resolvedOutDir, "README.md");
+      const indexPath = join7(resolvedOutDir, "README.md");
       const indexLines = [
         "# Reference Guides Index",
         "",
@@ -9754,7 +9754,7 @@ ${note.body}
       ];
       filesWritten.push(indexPath);
       if (!options.dryRun) {
-        mkdirSync3(dirname4(indexPath), { recursive: true });
+        mkdirSync4(dirname5(indexPath), { recursive: true });
         writeFileAtomic(indexPath, indexLines.join("\n"));
       }
       break;
@@ -9846,8 +9846,8 @@ var init_src = __esm({
 });
 
 // brain-keeper/src/operations.ts
-import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync10, renameSync as renameSync2, rmSync as rmSync2, statSync as statSync7 } from "node:fs";
-import { basename as basename5, dirname as dirname5, extname as extname2, join as join7 } from "node:path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync5, readFileSync as readFileSync11, renameSync as renameSync2, rmSync as rmSync3, statSync as statSync8 } from "node:fs";
+import { basename as basename6, dirname as dirname6, extname as extname2, join as join8 } from "node:path";
 function noteFileName(id) {
   return `${id}.md`;
 }
@@ -9878,7 +9878,7 @@ function buildNote(fields) {
   });
 }
 function assertMarkdown(path) {
-  const name = basename5(path);
+  const name = basename6(path);
   if (name === ABOUT_FILE) {
     throw new OperationError(
       `${ABOUT_FILE} describes its folder and is not a note. Use brain_update_branch to change it.`
@@ -9926,7 +9926,7 @@ function finish(vaultRoot, summary, changes, warnings, options) {
 }
 function folderNode(vaultRoot, folder) {
   const absolute = resolveInVault(vaultRoot, folder, "folder");
-  if (!existsSync7(absolute) || !statSync7(absolute).isDirectory()) {
+  if (!existsSync8(absolute) || !statSync8(absolute).isDirectory()) {
     throw new OperationError(
       `no such folder in the vault: ${folder || "."}. Create it with brain_add_branch first.`
     );
@@ -9944,12 +9944,12 @@ function overfullWarning(node2, added) {
   ];
 }
 function trashDestination(vaultRoot, name) {
-  const trash = join7(vaultRoot, TRASH_DIR);
-  mkdirSync4(trash, { recursive: true });
+  const trash = join8(vaultRoot, TRASH_DIR);
+  mkdirSync5(trash, { recursive: true });
   const extension = extname2(name);
   const stem = extension ? name.slice(0, -extension.length) : name;
-  let candidate = join7(trash, name);
-  for (let index = 2; existsSync7(candidate); index++) candidate = join7(trash, `${stem} ${index}${extension}`);
+  let candidate = join8(trash, name);
+  for (let index = 2; existsSync8(candidate); index++) candidate = join8(trash, `${stem} ${index}${extension}`);
   return candidate;
 }
 function addNote(vaultRoot, input, options = {}) {
@@ -9959,9 +9959,9 @@ function addNote(vaultRoot, input, options = {}) {
     const title = assertTitle(input.title, "a note");
     const id = slugify(input.id?.trim() || title);
     if (!id) throw new OperationError(`could not derive a usable id from ${JSON.stringify(input.id ?? title)}`);
-    const absolute = join7(node2.absolutePath, noteFileName(id));
+    const absolute = join8(node2.absolutePath, noteFileName(id));
     const path = relativeToVault(vaultRoot, absolute);
-    const exists = existsSync7(absolute);
+    const exists = existsSync8(absolute);
     if (exists && !input.overwrite) {
       throw new OperationError(
         `${path} already exists. Pass overwrite: true to replace it, or use brain_update_note to amend it.`
@@ -9974,7 +9974,7 @@ function addNote(vaultRoot, input, options = {}) {
       );
     }
     if (input.fallback) assertSingleFallback(node2, path);
-    const preserve = exists ? parseNote(readFileSync10(absolute, "utf8")) : void 0;
+    const preserve = exists ? parseNote(readFileSync11(absolute, "utf8")) : void 0;
     writeFileAtomic(absolute, buildNote({ id, title, criteria, fallback: input.fallback, content: input.content, preserve }));
     return finish(
       vaultRoot,
@@ -9989,11 +9989,11 @@ function updateNote(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(input.path);
     const absolute = resolveInVault(vaultRoot, input.path, "note");
-    if (!existsSync7(absolute)) throw new OperationError(`no such note: ${input.path}`);
+    if (!existsSync8(absolute)) throw new OperationError(`no such note: ${input.path}`);
     if (input.content !== void 0 && input.append !== void 0) {
       throw new OperationError("pass content (replace) or append (add to the end), not both");
     }
-    const note = parseNote(readFileSync10(absolute, "utf8"));
+    const note = parseNote(readFileSync11(absolute, "utf8"));
     const path = relativeToVault(vaultRoot, absolute);
     const touched = [];
     if (input.title !== void 0) {
@@ -10005,7 +10005,7 @@ function updateNote(vaultRoot, input, options = {}) {
       touched.push("criteria");
     }
     if (input.fallback !== void 0) {
-      if (input.fallback) assertSingleFallback(folderNode(vaultRoot, dirname5(path)), path);
+      if (input.fallback) assertSingleFallback(folderNode(vaultRoot, dirname6(path)), path);
       note.frontmatter.fallback = input.fallback;
       touched.push("fallback");
     }
@@ -10037,13 +10037,13 @@ function moveNote(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(input.from);
     const source = resolveInVault(vaultRoot, input.from, "note");
-    if (!existsSync7(source)) throw new OperationError(`no such note: ${input.from}`);
+    if (!existsSync8(source)) throw new OperationError(`no such note: ${input.from}`);
     const target = folderNode(vaultRoot, input.toFolder);
-    const note = parseNote(readFileSync10(source, "utf8"));
-    const id = slugify(input.newId?.trim() || note.frontmatter.id || basename5(source, ".md"));
-    const destination = join7(target.absolutePath, noteFileName(id));
+    const note = parseNote(readFileSync11(source, "utf8"));
+    const id = slugify(input.newId?.trim() || note.frontmatter.id || basename6(source, ".md"));
+    const destination = join8(target.absolutePath, noteFileName(id));
     if (destination === source) throw new OperationError(`${input.from} is already there`);
-    if (existsSync7(destination)) {
+    if (existsSync8(destination)) {
       throw new OperationError(`${relativeToVault(vaultRoot, destination)} already exists`);
     }
     const sourcePath = relativeToVault(vaultRoot, source);
@@ -10060,7 +10060,7 @@ function moveNote(vaultRoot, input, options = {}) {
       vaultRoot,
       `Moved ${input.from} to ${path}`,
       [{ action: "moved", path, from: sourcePath }],
-      dirname5(source) === target.absolutePath ? [] : overfullWarning(target, 1),
+      dirname6(source) === target.absolutePath ? [] : overfullWarning(target, 1),
       options
     );
   });
@@ -10069,24 +10069,24 @@ function removeNote(vaultRoot, path, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(path);
     const absolute = resolveInVault(vaultRoot, path, "note");
-    if (!existsSync7(absolute)) throw new OperationError(`no such note: ${path}`);
-    const relative3 = relativeToVault(vaultRoot, absolute);
+    if (!existsSync8(absolute)) throw new OperationError(`no such note: ${path}`);
+    const relative4 = relativeToVault(vaultRoot, absolute);
     const warnings = [];
     try {
-      if (parseNote(readFileSync10(absolute, "utf8")).frontmatter.fallback) {
+      if (parseNote(readFileSync11(absolute, "utf8")).frontmatter.fallback) {
         warnings.push(
-          `${relative3} was a catch-all note; ${dirname5(relative3) === "." ? "the vault" : `'${dirname5(relative3)}'`} now has none, so unsure routes there inject nothing. Mark another note \`fallback: true\`.`
+          `${relative4} was a catch-all note; ${dirname6(relative4) === "." ? "the vault" : `'${dirname6(relative4)}'`} now has none, so unsure routes there inject nothing. Mark another note \`fallback: true\`.`
         );
       }
     } catch {
     }
-    const destination = trashDestination(vaultRoot, basename5(absolute));
+    const destination = trashDestination(vaultRoot, basename6(absolute));
     renameSync2(absolute, destination);
     const trashed = relativeToVault(vaultRoot, destination);
     return finish(
       vaultRoot,
-      `Moved ${relative3} to ${trashed}`,
-      [{ action: "trashed", path: trashed, from: relative3 }],
+      `Moved ${relative4} to ${trashed}`,
+      [{ action: "trashed", path: trashed, from: relative4 }],
       warnings,
       options
     );
@@ -10098,14 +10098,14 @@ function createBranchFiles(vaultRoot, input) {
   const title = assertTitle(input.title, "a folder");
   const folderName = safeFolderName(input.folderName ?? title);
   const id = slugify(input.id?.trim() || folderName);
-  const absolute = join7(parent.absolutePath, folderName);
+  const absolute = join8(parent.absolutePath, folderName);
   const path = relativeToVault(vaultRoot, absolute);
-  if (existsSync7(absolute)) throw new OperationError(`${path} already exists`);
+  if (existsSync8(absolute)) throw new OperationError(`${path} already exists`);
   const clash = parent.children?.find((child) => child.id === id);
   if (clash) throw new OperationError(`id '${id}' is already used by ${clash.path} in this folder`);
-  mkdirSync4(absolute, { recursive: true });
+  mkdirSync5(absolute, { recursive: true });
   writeFileAtomic(
-    join7(absolute, ABOUT_FILE),
+    join8(absolute, ABOUT_FILE),
     buildNote({
       id,
       title,
@@ -10138,8 +10138,8 @@ function updateBranch(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     const node2 = folderNode(vaultRoot, input.folder);
     if (node2.path === ".") throw new OperationError("the vault root has no _about.md to update");
-    const aboutPath = join7(node2.absolutePath, ABOUT_FILE);
-    const note = existsSync7(aboutPath) ? parseNote(readFileSync10(aboutPath, "utf8")) : { frontmatter: {}, extraLines: [], hadFrontmatter: true, body: "" };
+    const aboutPath = join8(node2.absolutePath, ABOUT_FILE);
+    const note = existsSync8(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: {}, extraLines: [], hadFrontmatter: true, body: "" };
     const touched = [];
     if (input.title !== void 0) {
       note.frontmatter.title = assertTitle(input.title, "a folder");
@@ -10166,17 +10166,17 @@ function moveBranch(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     const node2 = folderNode(vaultRoot, input.folder);
     if (node2.path === ".") throw new OperationError("the vault root cannot be moved");
-    const currentParent = dirname5(node2.path) === "." ? "." : dirname5(node2.path);
+    const currentParent = dirname6(node2.path) === "." ? "." : dirname6(node2.path);
     const parent = folderNode(vaultRoot, input.toParent ?? currentParent);
-    const name = input.newName !== void 0 ? safeFolderName(input.newName) : basename5(node2.absolutePath);
-    const destination = join7(parent.absolutePath, name);
+    const name = input.newName !== void 0 ? safeFolderName(input.newName) : basename6(node2.absolutePath);
+    const destination = join8(parent.absolutePath, name);
     if (destination === node2.absolutePath && input.newId === void 0) {
       throw new OperationError(`${node2.path} is already there; pass toParent, newName or newId`);
     }
     if (isInsideVault(node2.absolutePath, parent.absolutePath)) {
       throw new OperationError("a folder cannot be moved into itself");
     }
-    if (destination !== node2.absolutePath && existsSync7(destination)) {
+    if (destination !== node2.absolutePath && existsSync8(destination)) {
       throw new OperationError(`${relativeToVault(vaultRoot, destination)} already exists`);
     }
     const id = input.newId !== void 0 ? slugify(input.newId) : node2.id;
@@ -10184,8 +10184,8 @@ function moveBranch(vaultRoot, input, options = {}) {
     if (clash) throw new OperationError(`id '${id}' is already used by ${clash.path} in '${parent.path}'`);
     if (destination !== node2.absolutePath) renameSync2(node2.absolutePath, destination);
     if (input.newId !== void 0) {
-      const aboutPath = join7(destination, ABOUT_FILE);
-      const about = existsSync7(aboutPath) ? parseNote(readFileSync10(aboutPath, "utf8")) : { frontmatter: { title: node2.title }, extraLines: [], hadFrontmatter: true, body: "" };
+      const aboutPath = join8(destination, ABOUT_FILE);
+      const about = existsSync8(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: { title: node2.title }, extraLines: [], hadFrontmatter: true, body: "" };
       about.frontmatter.id = id;
       writeFileAtomic(aboutPath, serialiseNote(about));
     }
@@ -10204,7 +10204,7 @@ function removeBranch(vaultRoot, folder, options = {}) {
     const node2 = folderNode(vaultRoot, folder);
     if (node2.path === ".") throw new OperationError("the vault root cannot be removed");
     const notes = flatten(node2).filter((each) => each.kind === "leaf").length;
-    const destination = trashDestination(vaultRoot, basename5(node2.absolutePath));
+    const destination = trashDestination(vaultRoot, basename6(node2.absolutePath));
     renameSync2(node2.absolutePath, destination);
     const trashed = relativeToVault(vaultRoot, destination);
     return finish(
@@ -10237,7 +10237,7 @@ function splitBranch(vaultRoot, input, options = {}) {
       );
     }
     const folderName = safeFolderName(input.newFolderName ?? input.newFolderTitle ?? "");
-    if (moveIds.some((id) => basename5(byId.get(id).absolutePath) === folderName)) {
+    if (moveIds.some((id) => basename6(byId.get(id).absolutePath) === folderName)) {
       throw new OperationError(`the new folder name '${folderName}' collides with a child being moved`);
     }
     const created = createBranchFiles(vaultRoot, {
@@ -10252,7 +10252,7 @@ function splitBranch(vaultRoot, input, options = {}) {
     try {
       for (const id of moveIds) {
         const child = byId.get(id);
-        const to = join7(created.absolute, basename5(child.absolutePath));
+        const to = join8(created.absolute, basename6(child.absolutePath));
         renameSync2(child.absolutePath, to);
         moved.push({ from: child.absolutePath, to, path: child.path });
       }
@@ -10263,7 +10263,7 @@ function splitBranch(vaultRoot, input, options = {}) {
         } catch {
         }
       }
-      rmSync2(created.absolute, { recursive: true, force: true });
+      rmSync3(created.absolute, { recursive: true, force: true });
       throw new OperationError(`split rolled back: ${error2.message}`);
     }
     const changes = [
@@ -10313,7 +10313,7 @@ function searchNotes(vaultRoot, query, limit = 10) {
     let body = "";
     if (node2.kind === "leaf") {
       try {
-        body = parseNote(readFileSync10(node2.absolutePath, "utf8")).body;
+        body = parseNote(readFileSync11(node2.absolutePath, "utf8")).body;
       } catch {
         body = "";
       }
@@ -10529,8 +10529,8 @@ var init_routing = __esm({
 });
 
 // brain-keeper/src/tools.ts
-import { existsSync as existsSync8, readFileSync as readFileSync11 } from "node:fs";
-import { join as join8, resolve as resolve9 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync12 } from "node:fs";
+import { join as join9, resolve as resolve9 } from "node:path";
 function annotationsFor(tool) {
   return {
     title: labelFor(tool.name),
@@ -10621,7 +10621,7 @@ var init_tools = __esm({
         const absolute = resolveInVault(vault, input.path, "note");
         let raw;
         try {
-          raw = readFileSync11(absolute, "utf8");
+          raw = readFileSync12(absolute, "utf8");
         } catch {
           return { text: `No such note: ${input.path}`, isError: true };
         }
@@ -10839,10 +10839,10 @@ Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${
         const vault = requireVault(config2);
         let evalPath = input.evalsFile;
         if (!evalPath) {
-          const jsonP = join8(vault, "evals.json");
-          const yamlP = join8(vault, "evals.yaml");
-          if (existsSync8(jsonP)) evalPath = jsonP;
-          else if (existsSync8(yamlP)) evalPath = yamlP;
+          const jsonP = join9(vault, "evals.json");
+          const yamlP = join9(vault, "evals.yaml");
+          if (existsSync9(jsonP)) evalPath = jsonP;
+          else if (existsSync9(yamlP)) evalPath = yamlP;
           else return { text: `No eval suite found in ${vault} (expected evals.json or evals.yaml)`, isError: true };
         }
         const suite = loadEvalSuite(resolve9(vault, evalPath));
@@ -19587,41 +19587,41 @@ var init_ajvProvider_CEoC_sr = __esm({
         schemelessOptions.skipEscape = true;
         return serialize(resolved, schemelessOptions);
       }
-      function resolveComponent(base, relative3, options, skipNormalization) {
+      function resolveComponent(base, relative4, options, skipNormalization) {
         const target = {};
         if (!skipNormalization) {
           base = parse2(serialize(base, options), options);
-          relative3 = parse2(serialize(relative3, options), options);
+          relative4 = parse2(serialize(relative4, options), options);
         }
         options = options || {};
-        if (!options.tolerant && relative3.scheme) {
-          target.scheme = relative3.scheme;
-          target.userinfo = relative3.userinfo;
-          target.host = relative3.host;
-          target.port = relative3.port;
-          target.path = removeDotSegments(relative3.path || "");
-          target.query = relative3.query;
+        if (!options.tolerant && relative4.scheme) {
+          target.scheme = relative4.scheme;
+          target.userinfo = relative4.userinfo;
+          target.host = relative4.host;
+          target.port = relative4.port;
+          target.path = removeDotSegments(relative4.path || "");
+          target.query = relative4.query;
         } else {
-          if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
-            target.userinfo = relative3.userinfo;
-            target.host = relative3.host;
-            target.port = relative3.port;
-            target.path = removeDotSegments(relative3.path || "");
-            target.query = relative3.query;
+          if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
+            target.userinfo = relative4.userinfo;
+            target.host = relative4.host;
+            target.port = relative4.port;
+            target.path = removeDotSegments(relative4.path || "");
+            target.query = relative4.query;
           } else {
-            if (!relative3.path) {
+            if (!relative4.path) {
               target.path = base.path;
-              if (relative3.query !== void 0) target.query = relative3.query;
+              if (relative4.query !== void 0) target.query = relative4.query;
               else target.query = base.query;
             } else {
-              if (relative3.path[0] === "/") target.path = removeDotSegments(relative3.path);
+              if (relative4.path[0] === "/") target.path = removeDotSegments(relative4.path);
               else {
-                if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) target.path = "/" + relative3.path;
-                else if (!base.path) target.path = relative3.path;
-                else target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
+                if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) target.path = "/" + relative4.path;
+                else if (!base.path) target.path = relative4.path;
+                else target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
                 target.path = removeDotSegments(target.path);
               }
-              target.query = relative3.query;
+              target.query = relative4.query;
             }
             target.userinfo = base.userinfo;
             target.host = base.host;
@@ -19629,7 +19629,7 @@ var init_ajvProvider_CEoC_sr = __esm({
           }
           target.scheme = base.scheme;
         }
-        target.fragment = relative3.fragment;
+        target.fragment = relative4.fragment;
         return target;
       }
       function equal(uriA, uriB, options) {
@@ -25049,9 +25049,9 @@ __export(server_exports, {
   createServer: () => createServer,
   main: () => main
 });
-import { readFileSync as readFileSync12 } from "node:fs";
-import { dirname as dirname6, join as join9 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { readFileSync as readFileSync13 } from "node:fs";
+import { dirname as dirname7, join as join10 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 function createServer(config2 = new LazyConfig()) {
   const server = new McpServer({
     name: "brain-keeper",
@@ -25105,12 +25105,12 @@ var init_server = __esm({
     init_config2();
     init_tools();
     VERSION = (() => {
-      for (let dir = dirname6(fileURLToPath2(import.meta.url)); ; dir = dirname6(dir)) {
+      for (let dir = dirname7(fileURLToPath3(import.meta.url)); ; dir = dirname7(dir)) {
         try {
-          const pkg = JSON.parse(readFileSync12(join9(dir, "package.json"), "utf8"));
+          const pkg = JSON.parse(readFileSync13(join10(dir, "package.json"), "utf8"));
           return String(pkg.version ?? "0.0.0");
         } catch {
-          if (dirname6(dir) === dir) return "0.0.0";
+          if (dirname7(dir) === dir) return "0.0.0";
         }
       }
     })();
@@ -25124,25 +25124,453 @@ init_fsutil();
 init_manifest();
 init_vault();
 init_config2();
-import { readFileSync as readFileSync13, watch } from "node:fs";
-import { dirname as dirname7, join as join10, resolve as resolve10 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { existsSync as existsSync10, readFileSync as readFileSync14, watch } from "node:fs";
+import { dirname as dirname8, join as join11, resolve as resolve10 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
+
+// brain-keeper/src/brains.ts
+init_zod();
+init_env();
+init_fsutil();
+init_manifest();
+init_paths();
+init_vault();
+import { spawnSync } from "node:child_process";
+import { createHash as createHash2 } from "node:crypto";
+import { existsSync as existsSync4, lstatSync, mkdirSync as mkdirSync2, mkdtempSync, readFileSync as readFileSync5, readdirSync as readdirSync2, realpathSync, rmSync as rmSync2, statSync as statSync5 } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename as basename3, dirname as dirname3, join as join4, relative as relative2 } from "node:path";
+import { fileURLToPath } from "node:url";
+var SOURCES_FILE = ".brain-sources.json";
+var BRAIN_META_FILE = "brain.json";
+var EVALS_FILE = "evals.json";
+var here = dirname3(fileURLToPath(import.meta.url));
+var STARTERS_DIR = findUp(here, "brains");
+function findUp(from, name) {
+  for (let dir = from; ; dir = dirname3(dir)) {
+    const candidate = join4(dir, name);
+    if (existsSync4(join4(candidate, "README.md")) && existsSync4(join4(dir, "package.json"))) return candidate;
+    if (dirname3(dir) === dir) return void 0;
+  }
+}
+var NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+var GITHUB_PART = /^[A-Za-z0-9_.-]+$/;
+function parseSource(spec, cwd = process.cwd()) {
+  const input = spec.trim();
+  if (NAME.test(input)) return { kind: "starter", spec: input, name: input };
+  if (/^(\.{1,2}[\\/]|[\\/]|~[\\/]?|[A-Za-z]:[\\/])/.test(input) || input === "." || input === "..") {
+    const path = resolveUserPath(input, cwd);
+    return { kind: "local", spec: path, path, name: slug(basename3(path)) };
+  }
+  const web = /^https:\/\/github\.com\/([^/]+)\/([^/#]+?)(?:\.git)?(?:\/tree\/([^/]+)(?:\/(.+?))?)?\/?$/.exec(input);
+  if (web) return github(input, web[1], web[2], web[3], web[4]);
+  const short2 = /^(?:github:)?([^/#\s]+)\/([^/#\s]+)((?:\/[^#\s]+)?)(?:#(\S+))?$/.exec(input);
+  if (short2 && !input.includes("://")) return github(input, short2[1], short2[2], short2[4], short2[3].replace(/^\//, ""));
+  const git = /^((?:https|file):\/\/\S+?)(?:#(\S+))?$/.exec(input);
+  if (git) {
+    const url2 = git[1];
+    return { kind: "git", spec: input, url: url2, ref: git[2], subdir: "", name: slug(basename3(url2).replace(/\.git$/, "")) };
+  }
+  throw new Error(
+    `'${spec}' is not a brain source. Use a starter name (see \`brain-keeper starters\`), owner/repo[/folder][#ref] for GitHub, or a git URL.`
+  );
+}
+function github(spec, owner, repo, ref, subdir = "") {
+  for (const part of [owner, repo]) {
+    if (!GITHUB_PART.test(part) || part.startsWith("-") || part.startsWith(".")) throw new Error(`'${spec}': '${part}' is not a GitHub name`);
+  }
+  if (ref !== void 0 && (!/^[A-Za-z0-9_./-]+$/.test(ref) || ref.startsWith("-"))) throw new Error(`'${spec}': '${ref}' is not a branch or tag`);
+  const folder = normaliseVaultPath(subdir);
+  if (folder.split("/").includes("..")) throw new Error(`'${spec}': the folder may not contain '..'`);
+  const cleanSubdir = folder === "." ? "" : folder;
+  return {
+    kind: "git",
+    spec,
+    url: `https://github.com/${owner}/${repo}.git`,
+    ref,
+    subdir: cleanSubdir,
+    name: slug(cleanSubdir ? basename3(cleanSubdir) : repo)
+  };
+}
+function slug(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) || "brain";
+}
+var BrainMetaSchema = object({
+  name: string2().regex(NAME, "lower-case letters, digits and dashes").optional(),
+  title: string2().optional(),
+  description: string2().optional(),
+  version: string2().optional(),
+  author: string2().optional(),
+  license: string2().optional(),
+  homepage: string2().optional()
+});
+var fetchSource = (source) => {
+  if (source.kind === "starter") {
+    if (!STARTERS_DIR) throw new Error("the starter brains folder is missing from this installation");
+    const dir = join4(STARTERS_DIR, source.name);
+    if (!existsSync4(join4(dir, "_about.md"))) {
+      const names = listStarters().map((starter) => starter.name);
+      throw new Error(`there is no starter brain '${source.name}'. Available: ${names.join(", ") || "none"}`);
+    }
+    return { dir, meta: readMeta(dir), cleanup: () => {
+    } };
+  }
+  if (source.kind === "local") {
+    if (!existsSync4(source.path) || !statSync5(source.path).isDirectory()) throw new Error(`${source.path} is not a folder`);
+    return { dir: source.path, meta: readMeta(source.path), cleanup: () => {
+    } };
+  }
+  const temp = mkdtempSync(join4(tmpdir(), "brain-source-"));
+  const cleanup = () => rmSync2(temp, { recursive: true, force: true });
+  try {
+    const args = ["clone", "--depth", "1", "--quiet", ...source.ref ? ["--branch", source.ref] : [], "--", source.url, join4(temp, "repo")];
+    const clone2 = spawnSync("git", args, { encoding: "utf8", timeout: 12e4, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    if (clone2.error) {
+      throw new Error(
+        clone2.error.code === "ENOENT" ? "git is needed to add a brain from a repository, and it is not on the PATH" : `git clone failed: ${clone2.error.message}`
+      );
+    }
+    if (clone2.status !== 0) throw new Error(`could not fetch ${source.url}${source.ref ? ` at ${source.ref}` : ""}: ${clone2.stderr.trim() || `git exited with ${clone2.status}`}`);
+    const commit = spawnSync("git", ["-C", join4(temp, "repo"), "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim() || void 0;
+    const dir = join4(temp, "repo", source.subdir);
+    if (!existsSync4(dir) || !statSync5(dir).isDirectory()) throw new Error(`${source.spec}: there is no folder '${source.subdir}' in the repository`);
+    const inside = relative2(realpathSync(join4(temp, "repo")), realpathSync(dir));
+    if (inside.startsWith("..") || inside.includes(":")) throw new Error(`${source.spec}: '${source.subdir}' points outside the repository`);
+    return { dir, commit, meta: readMeta(dir), cleanup };
+  } catch (error2) {
+    cleanup();
+    throw error2;
+  }
+};
+function readMeta(dir) {
+  const file = join4(dir, BRAIN_META_FILE);
+  if (!existsSync4(file)) return {};
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync5(file, "utf8"));
+  } catch (error2) {
+    throw new Error(`${BRAIN_META_FILE} is not valid JSON: ${error2.message}`);
+  }
+  const parsed = BrainMetaSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`${BRAIN_META_FILE}: ${parsed.error.issues.map((issue3) => `${issue3.path.join(".")}: ${issue3.message}`).join("; ")}`);
+  }
+  return parsed.data;
+}
+var ROOT_SKIP = /^(readme|changelog|contributing|license|licence|code_of_conduct|security)(\..*)?$/i;
+function brainFiles(root, dir = root) {
+  const files = [];
+  for (const name of readdirSync2(dir).sort()) {
+    if (name.startsWith(".") || name === "node_modules" || name === MANIFEST_FILE) continue;
+    const absolute = join4(dir, name);
+    const rel = relative2(root, absolute).split("\\").join("/");
+    const stat = lstatSync(absolute);
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) {
+      files.push(...brainFiles(root, absolute));
+      continue;
+    }
+    if (dir === root && (ROOT_SKIP.test(name) || name === BRAIN_META_FILE)) continue;
+    if (name.toLowerCase().endsWith(".md") || dir === root && name === EVALS_FILE) files.push(rel);
+  }
+  return files;
+}
+function readSources(vaultRoot) {
+  const file = join4(vaultRoot, SOURCES_FILE);
+  if (!existsSync4(file)) return { version: 1, brains: {} };
+  try {
+    const parsed = JSON.parse(readFileSync5(file, "utf8"));
+    return { version: 1, brains: parsed.brains ?? {} };
+  } catch (error2) {
+    throw new Error(`${SOURCES_FILE} is not valid JSON (${error2.message}); fix or delete it`);
+  }
+}
+function writeSources(vaultRoot, record2) {
+  writeFileAtomic(join4(vaultRoot, SOURCES_FILE), JSON.stringify(record2, null, 2) + "\n");
+}
+var sha1 = (content) => createHash2("sha1").update(content).digest("hex");
+function addBrain(options) {
+  const source = parseSource(options.source);
+  const fetched = (options.fetch ?? fetchSource)(source);
+  try {
+    const folder = normaliseVaultPath(options.as ?? fetched.meta.name ?? source.name);
+    if (folder === ".") throw new Error("a brain goes into its own folder, not the vault root");
+    const target = resolveInVault(options.vaultRoot, folder, "folder");
+    const record2 = readSources(options.vaultRoot);
+    if (record2.brains[folder]) throw new Error(`'${folder}' already holds ${record2.brains[folder].source}; run \`brain-keeper update ${folder}\` to update it`);
+    if (existsSync4(target) && readdirSync2(target).length > 0) {
+      throw new Error(`the folder '${folder}' already exists in the vault; choose another with --as <folder>`);
+    }
+    checkRoom(options.vaultRoot, folder);
+    const files = brainFiles(fetched.dir);
+    const notes = files.filter((file) => file !== EVALS_FILE);
+    const about = aboutFor(fetched, notes);
+    if (notes.length === 0) throw new Error(`${source.spec} has no notes`);
+    const title = fetched.meta.title ?? source.name;
+    const result = {
+      folder,
+      source,
+      title,
+      commit: fetched.commit,
+      version: fetched.meta.version,
+      added: [...about.generated ? ["_about.md"] : [], ...notes],
+      evals: 0,
+      dryRun: options.dryRun === true
+    };
+    if (result.dryRun) return result;
+    result.compiled = withVaultLock(options.vaultRoot, () => {
+      const hashes = {};
+      for (const file of notes) {
+        const content = readFileSync5(join4(fetched.dir, file), "utf8");
+        writeInto(target, file, content);
+        hashes[file] = sha1(content);
+      }
+      if (about.generated) {
+        writeInto(target, "_about.md", about.generated);
+        hashes["_about.md"] = sha1(about.generated);
+      }
+      result.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
+      record2.brains[folder] = {
+        source: source.spec,
+        kind: source.kind,
+        ...source.kind === "git" ? { url: source.url, ref: source.ref, subdir: source.subdir || void 0 } : {},
+        commit: fetched.commit,
+        version: fetched.meta.version,
+        title,
+        installedAt: (options.now?.() ?? /* @__PURE__ */ new Date()).toISOString(),
+        files: hashes
+      };
+      writeSources(options.vaultRoot, record2);
+      return compileVault(options.vaultRoot);
+    });
+    return result;
+  } finally {
+    fetched.cleanup();
+  }
+}
+function aboutFor(fetched, notes) {
+  if (notes.includes("_about.md")) return {};
+  const { title, description } = fetched.meta;
+  if (!description) {
+    throw new Error("the brain has no _about.md at its root, and no description in brain.json to route by");
+  }
+  const id = slug(title ?? "brain").replace(/-/g, "_");
+  return { generated: `---
+id: ${id}
+title: ${title ?? id}
+criteria: ${description.replace(/\s+/g, " ").trim()}
+---
+` };
+}
+function checkRoom(vaultRoot, folder) {
+  const parentPath = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : ".";
+  const tree = scanVault(vaultRoot);
+  const parent = parentPath === "." ? tree.root : findNode(tree.root, parentPath);
+  if (!parent) return;
+  const children = parent.children?.length ?? 0;
+  if (children >= MAX_CHILDREN) {
+    const where = parentPath === "." ? "The vault root" : `'${parentPath}'`;
+    throw new Error(
+      `${where} already has ${children} entries, the most one folder can route between. Put the brain inside an existing folder with --as <folder>/<name>.`
+    );
+  }
+}
+function writeInto(target, file, content) {
+  const path = join4(target, file);
+  mkdirSync2(dirname3(path), { recursive: true });
+  writeFileAtomic(path, content);
+}
+function mergeEvals(vaultRoot, folder, brainDir) {
+  const incoming = join4(brainDir, EVALS_FILE);
+  const file = join4(vaultRoot, EVALS_FILE);
+  let suite = { version: 1, evals: [] };
+  if (existsSync4(file)) {
+    try {
+      suite = JSON.parse(readFileSync5(file, "utf8"));
+    } catch {
+      return 0;
+    }
+  }
+  const prefix = `${folder}/`;
+  const kept = (suite.evals ?? []).filter((entry) => !entry.id.startsWith(prefix));
+  let added = [];
+  if (existsSync4(incoming)) {
+    try {
+      const theirs = JSON.parse(readFileSync5(incoming, "utf8"));
+      added = (theirs.evals ?? []).map((entry) => ({ ...entry, id: `${prefix}${entry.id}` }));
+    } catch {
+      added = [];
+    }
+  }
+  if (added.length === 0 && kept.length === (suite.evals ?? []).length && !existsSync4(file)) return 0;
+  writeFileAtomic(file, JSON.stringify({ ...suite, version: suite.version ?? 1, evals: [...kept, ...added] }, null, 2) + "\n");
+  return added.length;
+}
+function updateBrains(options) {
+  const record2 = readSources(options.vaultRoot);
+  const folders = options.folder ? [normaliseVaultPath(options.folder)] : Object.keys(record2.brains).sort();
+  if (options.folder && !record2.brains[folders[0]]) {
+    throw new Error(`'${folders[0]}' is not a brain added with brain-keeper add. Added: ${Object.keys(record2.brains).join(", ") || "none"}`);
+  }
+  const dryRun = options.dryRun === true;
+  const updates = [];
+  const run = () => {
+    for (const folder of folders) {
+      const installed = record2.brains[folder];
+      const update = { folder, source: installed.source, from: installed.commit ?? installed.version, added: [], updated: [], kept: [], removedUpstream: [], evals: 0 };
+      updates.push(update);
+      let fetched;
+      try {
+        fetched = (options.fetch ?? fetchSource)(parseSource(installed.source));
+        update.to = fetched.commit ?? fetched.meta.version;
+        const target = resolveInVault(options.vaultRoot, folder, "folder");
+        const upstream = new Set(brainFiles(fetched.dir).filter((file) => file !== EVALS_FILE));
+        const hashes = { ...installed.files };
+        for (const file of [...upstream].sort()) {
+          const content = readFileSync5(join4(fetched.dir, file), "utf8");
+          const incoming = sha1(content);
+          const localPath = join4(target, file);
+          if (!existsSync4(localPath)) {
+            if (installed.files[file] !== void 0) continue;
+            update.added.push(file);
+          } else {
+            const local = sha1(readFileSync5(localPath, "utf8"));
+            if (local === incoming) {
+              hashes[file] = incoming;
+              continue;
+            }
+            if (local !== installed.files[file]) {
+              update.kept.push(file);
+              continue;
+            }
+            update.updated.push(file);
+          }
+          if (!dryRun) writeInto(target, file, content);
+          hashes[file] = incoming;
+        }
+        for (const file of Object.keys(installed.files)) {
+          if (!upstream.has(file) && file !== "_about.md") update.removedUpstream.push(file);
+        }
+        if (!dryRun) {
+          update.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
+          record2.brains[folder] = {
+            ...installed,
+            commit: fetched.commit,
+            version: fetched.meta.version ?? installed.version,
+            updatedAt: (options.now?.() ?? /* @__PURE__ */ new Date()).toISOString(),
+            files: hashes
+          };
+        }
+      } catch (error2) {
+        update.error = error2.message;
+      } finally {
+        fetched?.cleanup();
+      }
+    }
+    if (dryRun) return void 0;
+    writeSources(options.vaultRoot, record2);
+    return compileVault(options.vaultRoot);
+  };
+  const compiled = dryRun ? run() : withVaultLock(options.vaultRoot, run);
+  return { updates, compiled, dryRun };
+}
+function listStarters() {
+  if (!STARTERS_DIR) return [];
+  const starters = [];
+  for (const name of readdirSync2(STARTERS_DIR).sort()) {
+    const dir = join4(STARTERS_DIR, name);
+    if (!statSync5(dir).isDirectory() || !existsSync4(join4(dir, "_about.md"))) continue;
+    const meta2 = readMeta(dir);
+    starters.push({
+      name,
+      title: meta2.title ?? name,
+      description: meta2.description ?? "",
+      version: meta2.version,
+      notes: brainFiles(dir).filter((file) => file.endsWith(".md") && !file.endsWith("_about.md")).length
+    });
+  }
+  return starters;
+}
+function describeSource(source, commit, version2) {
+  if (source.kind === "starter") return `the ${source.name} starter brain${version2 ? ` v${version2}` : ""}`;
+  if (source.kind === "local") return source.path;
+  return `${source.url.replace(/\.git$/, "")}${source.subdir ? `/${source.subdir}` : ""}${commit ? ` @ ${commit.slice(0, 7)}` : ""}`;
+}
+function renderAdd(result) {
+  const notes = result.added.filter((file) => file.endsWith(".md") && basename3(file) !== "_about.md");
+  const lines = [
+    result.dryRun ? `Dry run: nothing was written. Would add ${notes.length} note(s) from ${describeSource(result.source, result.commit, result.version)} into ${result.folder}/:` : `Added ${result.title} into ${result.folder}/: ${notes.length} note(s) from ${describeSource(result.source, result.commit, result.version)}.`
+  ];
+  if (result.dryRun) lines.push(...result.added.map((file) => `  ${result.folder}/${file}`));
+  if (result.evals) lines.push(`  evals     ${result.evals} routing eval case(s) added to evals.json`);
+  if (result.compiled) {
+    const errors = result.compiled.issues.filter((issue3) => issue3.severity === "error");
+    lines.push(`  compiled  ${result.compiled.counts.branches} folder(s), ${result.compiled.counts.leaves} note(s) in the vault`);
+    for (const issue3 of errors.slice(0, 5)) lines.push(`  error     ${issue3.path}: ${issue3.message}`);
+  }
+  if (result.source.kind === "git") {
+    lines.push(
+      "",
+      "These notes are given to your coding agent as context whenever a prompt routes to them.",
+      "Only add brains from sources you trust, and read what they say."
+    );
+  }
+  if (!result.dryRun) lines.push("", `Update it later with: brain-keeper update ${result.folder}`);
+  return lines.join("\n");
+}
+function renderUpdate(result) {
+  if (result.updates.length === 0) return "No brains were added with brain-keeper add, so there is nothing to update.";
+  const lines = [result.dryRun ? "Dry run: nothing was written." : "Updated shared brains:"];
+  for (const update of result.updates) {
+    if (update.error) {
+      lines.push(`  ${update.folder}/  failed: ${update.error}`);
+      continue;
+    }
+    const changes = update.added.length + update.updated.length;
+    const moved = update.from && update.to && update.from !== update.to ? ` (${short(update.from)} -> ${short(update.to)})` : "";
+    lines.push(`  ${update.folder}/  ${changes ? `${update.added.length} new, ${update.updated.length} updated` : "already up to date"}${moved}`);
+    for (const file of update.kept) lines.push(`    kept your edit: ${file} (it also changed upstream)`);
+    for (const file of update.removedUpstream) lines.push(`    no longer upstream, left in place: ${file}`);
+  }
+  return lines.join("\n");
+}
+var short = (ref) => /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 7) : ref;
+function renderStarters(vaultRoot) {
+  const starters = listStarters();
+  const lines = ["Starter brains (add with: brain-keeper add <name>):"];
+  if (starters.length === 0) lines.push("  none in this installation");
+  for (const starter of starters) {
+    lines.push(`  ${starter.name.padEnd(18)} ${starter.title}${starter.version ? ` v${starter.version}` : ""}, ${starter.notes} notes`);
+    if (starter.description) lines.push(`  ${"".padEnd(18)} ${starter.description}`);
+  }
+  lines.push("", "Any git repository works too: brain-keeper add owner/repo[/folder][#ref]");
+  if (vaultRoot) {
+    const installed = Object.entries(readSources(vaultRoot).brains);
+    if (installed.length) {
+      lines.push("", "Added to this vault:");
+      for (const [folder, brain] of installed) {
+        lines.push(`  ${folder.padEnd(18)} ${brain.source}${brain.commit ? ` @ ${brain.commit.slice(0, 7)}` : brain.version ? ` v${brain.version}` : ""}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
 
 // brain-keeper/src/init.ts
 init_env();
 init_fsutil();
 init_manifest();
 init_vault();
-import { copyFileSync, existsSync as existsSync4, mkdirSync as mkdirSync2, readFileSync as readFileSync5, readdirSync as readdirSync2, statSync as statSync5 } from "node:fs";
-import { dirname as dirname3, join as join4, relative as relative2, resolve as resolve5 } from "node:path";
-import { fileURLToPath } from "node:url";
-var here = dirname3(fileURLToPath(import.meta.url));
-var EXAMPLE_VAULT = findUp(here, join4("pi-traverser", "fixtures", "vault")) ?? resolve5(here, "..", "..", "pi-traverser", "fixtures", "vault");
-function findUp(from, relative3) {
-  for (let dir = from; ; dir = dirname3(dir)) {
-    const candidate = join4(dir, relative3);
-    if (existsSync4(candidate)) return candidate;
-    if (dirname3(dir) === dir) return void 0;
+import { copyFileSync, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync6 } from "node:fs";
+import { dirname as dirname4, join as join5, relative as relative3, resolve as resolve5 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var here2 = dirname4(fileURLToPath2(import.meta.url));
+var EXAMPLE_VAULT = findUp2(here2, join5("pi-traverser", "fixtures", "vault")) ?? resolve5(here2, "..", "..", "pi-traverser", "fixtures", "vault");
+function findUp2(from, relative4) {
+  for (let dir = from; ; dir = dirname4(dir)) {
+    const candidate = join5(dir, relative4);
+    if (existsSync5(candidate)) return candidate;
+    if (dirname4(dir) === dir) return void 0;
   }
 }
 var FALLBACK_NOTE = `---
@@ -25172,16 +25600,16 @@ var IGNORE_TEMPLATE = `# Folders and notes that are not part of the brain, one p
 `;
 function copyMissing(from, to, root, dryRun) {
   const copied = [];
-  for (const name of readdirSync2(from).sort()) {
+  for (const name of readdirSync3(from).sort()) {
     if (name === MANIFEST_FILE) continue;
-    const source = join4(from, name);
-    const target = join4(to, name);
-    if (statSync5(source).isDirectory()) {
-      if (!dryRun) mkdirSync2(target, { recursive: true });
+    const source = join5(from, name);
+    const target = join5(to, name);
+    if (statSync6(source).isDirectory()) {
+      if (!dryRun) mkdirSync3(target, { recursive: true });
       copied.push(...copyMissing(source, target, root, dryRun));
-    } else if (!existsSync4(target)) {
+    } else if (!existsSync5(target)) {
       if (!dryRun) copyFileSync(source, target);
-      copied.push(relative2(root, target).split("\\").join("/"));
+      copied.push(relative3(root, target).split("\\").join("/"));
     }
   }
   return copied;
@@ -25191,20 +25619,20 @@ function initVault(options) {
   const dryRun = options.dryRun === true;
   const vaultRoot = resolveUserPath(options.dir, options.cwd ?? process.cwd());
   const created = [];
-  if (!dryRun) mkdirSync2(vaultRoot, { recursive: true });
+  if (!dryRun) mkdirSync3(vaultRoot, { recursive: true });
   const run = () => {
     if (options.example) created.push(...copyMissing(EXAMPLE_VAULT, vaultRoot, vaultRoot, dryRun));
-    const fallback = join4(vaultRoot, "general_instructions.md");
-    if (!existsSync4(fallback) && !created.includes("general_instructions.md")) {
+    const fallback = join5(vaultRoot, "general_instructions.md");
+    if (!existsSync5(fallback) && !created.includes("general_instructions.md")) {
       if (!dryRun) writeFileAtomic(fallback, FALLBACK_NOTE);
       created.push("general_instructions.md");
     }
-    const ignore = join4(vaultRoot, IGNORE_FILE);
-    if (!existsSync4(ignore)) {
+    const ignore = join5(vaultRoot, IGNORE_FILE);
+    if (!existsSync5(ignore)) {
       if (!dryRun) writeFileAtomic(ignore, IGNORE_TEMPLATE);
       created.push(IGNORE_FILE);
     }
-    if (dryRun && !existsSync4(vaultRoot)) {
+    if (dryRun && !existsSync5(vaultRoot)) {
       return {
         files: [],
         issues: [],
@@ -25223,15 +25651,15 @@ function initVault(options) {
   if (options.saveConfig !== false) {
     configPath = userConfigPath(env);
     let current = {};
-    if (existsSync4(configPath)) {
+    if (existsSync5(configPath)) {
       try {
-        current = JSON.parse(readFileSync5(configPath, "utf8"));
+        current = JSON.parse(readFileSync6(configPath, "utf8"));
       } catch (error2) {
         throw new Error(`could not parse ${configPath}: ${error2.message}`);
       }
     }
     if (!dryRun) {
-      mkdirSync2(dirname3(configPath), { recursive: true });
+      mkdirSync3(dirname4(configPath), { recursive: true });
       writeFileAtomic(configPath, JSON.stringify({ ...current, vaultRoot }, null, 2) + "\n");
     }
   }
@@ -25257,11 +25685,14 @@ List folders that are not part of the brain (Templates, Attachments\u2026) in ${
 
 // brain-keeper/bin/brain-keeper.ts
 init_tools();
-var KEEPER_ROOT = resolve10(dirname7(fileURLToPath3(import.meta.url)), "..");
+var KEEPER_ROOT = resolve10(dirname8(fileURLToPath4(import.meta.url)), "..");
 var USAGE = `
 brain-keeper <command> [options]
 
   init <dir>                Create a vault (or adopt an existing one) and save it as the default
+  starters                  List the starter brains, and the shared brains this vault holds
+  add <source>              Add a shared brain as its own folder: a starter name, owner/repo[/folder][#ref], or a git URL
+  update [folder]           Pull new and changed notes into shared brains, keeping your edits
   setup                     Print the commands that connect this server to Claude Code and Codex
   serve                     Run the MCP server on stdio (what a harness launches)
   tools                     List the tools this server exposes
@@ -25284,13 +25715,15 @@ Options
   --depth <n>               Tree depth (default 3)
   --limit <n>               Most search results (default 10)
   --expect <id>             Expected destination for the last check prompt
-  --dry-run                 For rebuild, init and export: report without writing
+  --dry-run                 For rebuild, init, add, update and export: report without writing
   --example                 For init: include the example notes
+  --starter <source>        For init: add a shared brain too, e.g. --starter python-backend
+  --as <folder>             For add: the vault folder to put the brain in (default: its name)
   --no-config               For init: do not save the vault to the user config
 
 Flags also accept --name=value.
 `.trim();
-var VALUE_FLAGS = /* @__PURE__ */ new Set(["vault", "url", "depth", "expect", "limit", "format", "out"]);
+var VALUE_FLAGS = /* @__PURE__ */ new Set(["vault", "url", "depth", "expect", "limit", "format", "out", "starter", "as"]);
 function configFrom(args) {
   const overrides = {};
   if (typeof args.flags.vault === "string") overrides.vaultRoot = args.flags.vault;
@@ -25358,14 +25791,52 @@ async function main2() {
         process.stderr.write("init needs a directory, e.g. brain-keeper init ~/brain\n");
         return 2;
       }
+      const dryRun = args.flags["dry-run"] === true;
       const result = initVault({
         dir,
         example: args.flags.example === true,
         saveConfig: args.flags["no-config"] !== true,
-        dryRun: args.flags["dry-run"] === true
+        dryRun
       });
       process.stdout.write(renderInit(result) + "\n");
+      if (typeof args.flags.starter === "string") {
+        const added = addBrain({ vaultRoot: result.vaultRoot, source: args.flags.starter, dryRun: dryRun || !existsSync10(result.vaultRoot) });
+        process.stdout.write("\n" + renderAdd(added) + "\n");
+      }
       return 0;
+    }
+    case "starters": {
+      let vaultRoot;
+      try {
+        vaultRoot = configFrom(args).vaultRoot || void 0;
+      } catch {
+      }
+      process.stdout.write(renderStarters(vaultRoot) + "\n");
+      return 0;
+    }
+    case "add": {
+      const source = args.positional[0];
+      if (!source) {
+        process.stderr.write("add needs a source, e.g. brain-keeper add python-backend, or brain-keeper add owner/repo\n");
+        return 2;
+      }
+      const result = addBrain({
+        vaultRoot: requireVault(configFrom(args)),
+        source,
+        as: typeof args.flags.as === "string" ? args.flags.as : void 0,
+        dryRun: args.flags["dry-run"] === true
+      });
+      process.stdout.write(renderAdd(result) + "\n");
+      return 0;
+    }
+    case "update": {
+      const result = updateBrains({
+        vaultRoot: requireVault(configFrom(args)),
+        folder: args.positional[0],
+        dryRun: args.flags["dry-run"] === true
+      });
+      process.stdout.write(renderUpdate(result) + "\n");
+      return result.updates.some((update) => update.error) ? 1 : 0;
     }
     case "setup":
       process.stdout.write(setupText() + "\n");
@@ -25459,7 +25930,7 @@ async function main2() {
         process.stderr.write("call needs a tool name\n");
         return 2;
       }
-      const raw = payload === "-" ? readFileSync13(0, "utf8") : payload ?? "{}";
+      const raw = payload === "-" ? readFileSync14(0, "utf8") : payload ?? "{}";
       let input;
       try {
         input = JSON.parse(raw);
@@ -25484,7 +25955,7 @@ ${USAGE}
 }
 function setupText() {
   const launcher = resolve10(KEEPER_ROOT, "bin", "brain-keeper.mjs");
-  const commands = join10(KEEPER_ROOT, "commands", "brain-*.md");
+  const commands = join11(KEEPER_ROOT, "commands", "brain-*.md");
   const config2 = loadConfig2();
   const quote2 = (path) => /\s/.test(path) ? `"${path}"` : path;
   const needsKey = !config2.apiKey;

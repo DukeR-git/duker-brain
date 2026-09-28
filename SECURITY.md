@@ -6,8 +6,8 @@ Only the latest release gets security fixes.
 
 | Version | Supported |
 |---|---|
-| 1.1.x | Yes |
-| < 1.1 | No |
+| 1.2.x | Yes |
+| < 1.2 | No |
 
 ## Reporting a vulnerability
 
@@ -32,6 +32,9 @@ These are in scope:
   traversal in a note ID or path.
 - **host-laya**: authentication bypass when `LAYA_API_KEY` is set, or anything
   that lets a client do more than request a decision.
+- **Shared brains**: a brain added with `brain-keeper add` that gets anything
+  into your vault other than its own notes, for example files from outside
+  its folder through links or path tricks, or anything that executes.
 - **Prompt injection that escalates**: a note or prompt that makes the router or
   the keeper act beyond reading and writing notes in the vault.
 
@@ -39,8 +42,10 @@ These are out of scope:
 
 - host-laya started without `LAYA_API_KEY` and bound to a network interface.
   That is documented as unauthenticated.
-- The content of your own vault. Notes are injected into the agent's context
-  by design, so only put there what you want the agent to read.
+- The content of your own vault, including notes from a shared brain you
+  added. Notes are injected into the agent's context by design, so only put
+  there, and only add brains from sources, you trust. Report a malicious
+  published brain to its host (for example GitHub) instead.
 - Vulnerabilities in the hosted TypeSafe Jev API. Report those to TypeSafe.
 
 ## Hardening checklist
