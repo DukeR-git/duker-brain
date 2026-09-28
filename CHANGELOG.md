@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-28
+
+### Added
+
+- **Claude Code plugin.** Install with `/plugin marketplace add DukeR-git/duker-brain`
+  and `/plugin install duker-brain@duker-brain`. A `UserPromptSubmit` hook
+  routes every prompt and adds the matching note as context, with the same
+  reminders, trivial-prompt skipping and circuit breaker as the Pi extension.
+  It also brings the 17 `brain_*` tools as an MCP server and the
+  `/duker-brain:init`, `status`, `capture` and `research` commands. The vault,
+  API key and decisions URL can be set in the plugin's settings dialog.
+- `dist/` now holds fully self-contained bundles, including the new
+  `brain-hook.mjs`, and is committed, so the plugin runs with no `npm install`.
+
 ### Changed
 
 - Node.js 22 or newer is now required. Node.js 20 reached end of life in April
@@ -47,5 +61,6 @@ First public release.
 - **host-laya**: an optional, Jev-compatible FastAPI decisions service around a
   local Laya checkpoint, containerised for Intel Arc GPUs.
 
-[Unreleased]: https://github.com/DukeR-git/duker-brain/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/DukeR-git/duker-brain/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/DukeR-git/duker-brain/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DukeR-git/duker-brain/releases/tag/v1.0.0

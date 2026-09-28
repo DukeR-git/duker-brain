@@ -4,3 +4,6 @@
 # Shell scripts and container files run on Linux; CRLF breaks them.
 *.sh text eol=lf
 Dockerfile text eol=lf
+
+# Bundles built by scripts/build.mjs: collapsed in GitHub diffs, left out of language stats.
+dist/** linguist-generated=true

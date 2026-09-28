@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { describeConfig, loadConfig } from "../src/config.js";
-import { isLocalUrl } from "../src/env.js";
+import { applyPluginOptions, isLocalUrl } from "../src/env.js";
 import { Logger } from "../src/logger.js";
 import { isolatedEnv, tempDir } from "./helpers.js";
 
@@ -97,6 +97,39 @@ describe("sources", () => {
 		const lan = loadConfig({ skipFile: true, env: { BRAIN_DECISIONS_URL: "http://192.168.1.20:8081" } });
 		assert.equal(lan.timeoutMs, 500);
 		assert.equal(lan.routeBudgetMs, 1000);
+	});
+});
+
+describe("applyPluginOptions", () => {
+	it("maps Claude Code plugin options onto the BRAIN_* variables", () => {
+		const env = applyPluginOptions({
+			CLAUDE_PLUGIN_OPTION_VAULT_ROOT: "/vaults/brain",
+			CLAUDE_PLUGIN_OPTION_API_KEY: "sk-plugin",
+			CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "http://laya:8081",
+		});
+		assert.equal(env.BRAIN_VAULT_ROOT, "/vaults/brain");
+		assert.equal(env.BRAIN_DECISIONS_API_KEY, "sk-plugin");
+		assert.equal(env.BRAIN_DECISIONS_URL, "http://laya:8081");
+	});
+
+	it("leaves a BRAIN_* variable the user set alone", () => {
+		const env = applyPluginOptions({ BRAIN_VAULT_ROOT: "/mine", CLAUDE_PLUGIN_OPTION_VAULT_ROOT: "/plugin" });
+		assert.equal(env.BRAIN_VAULT_ROOT, "/mine");
+	});
+
+	it("ignores options that are empty or were never substituted", () => {
+		const env = applyPluginOptions({
+			CLAUDE_PLUGIN_OPTION_VAULT_ROOT: "  ",
+			CLAUDE_PLUGIN_OPTION_API_KEY: "${user_config.api_key}",
+		});
+		assert.equal(env.BRAIN_VAULT_ROOT, undefined);
+		assert.equal(env.BRAIN_DECISIONS_API_KEY, undefined);
+	});
+
+	it("feeds the plugin's vault into the config loader", () => {
+		const config = loadConfig({ skipFile: true, env: applyPluginOptions({ CLAUDE_PLUGIN_OPTION_VAULT_ROOT: tempDir() }) });
+		assert.ok(config.vaultRoot);
+		assert.equal(config.sources.vaultRoot, "env BRAIN_VAULT_ROOT");
 	});
 });
 

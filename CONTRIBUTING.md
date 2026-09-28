@@ -55,9 +55,16 @@ pytest
 - `brain-core` is imported **by relative path** and has no build step, so
   `brain-core`, `pi-traverser` and `brain-keeper` must stay side by side. The
   root npm workspace only exists so dependencies install in one place.
-- Pi loads the TypeScript directly, so there is nothing to compile for it. The
-  `dist/` bundles from `npm run build` are for standalone CLI use and are not
-  committed.
+- Pi loads the TypeScript directly, so there is nothing to compile for it.
+- The Claude Code plugin runs the self-contained bundles in `dist/`, because
+  Claude Code does not run `npm install` for plugins. **After changing any
+  TypeScript that the CLIs or the hook use, run `npm run build` and commit
+  `dist/` with the change.** CI fails when the committed bundles are stale.
+- The plugin itself is declared in `.claude-plugin/plugin.json` (hooks, MCP
+  server, commands, settings) and `.claude-plugin/marketplace.json`. Check both
+  with `claude plugin validate .claude-plugin/plugin.json` and
+  `claude plugin validate .` before opening a pull request that touches them.
+  To try the plugin from a checkout: `claude --plugin-dir /path/to/duker-brain`.
 - A test asserts that recompiling the fixture vault in
   `pi-traverser/fixtures/vault` produces no diff. If you change the compiler
   on purpose, regenerate the fixture manifests in the same commit.
@@ -69,6 +76,8 @@ pytest
   that explain why rather than what.
 - Update the relevant README, and add a line under `Unreleased` in
   [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
+- Releases bump `version` in `.claude-plugin/plugin.json` along with the
+  packages. Plugin users stay on the version it names until it changes.
 - Keep line endings LF. `.gitattributes` handles this, but editors on Windows
   sometimes override it.
 

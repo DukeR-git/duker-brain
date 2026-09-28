@@ -20,12 +20,18 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { LazyConfig, type KeeperConfig } from "./config.js";
 import { TOOLS, annotationsFor, runTool } from "./tools.js";
 
+/**
+ * The nearest package.json above this file: brain-keeper's own from source, the
+ * repository root's from a bundle in dist/ (as the Claude Code plugin runs it).
+ */
 const VERSION = (() => {
-	try {
-		const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8"));
-		return String(pkg.version ?? "0.0.0");
-	} catch {
-		return "0.0.0";
+	for (let dir = dirname(fileURLToPath(import.meta.url)); ; dir = dirname(dir)) {
+		try {
+			const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+			return String(pkg.version ?? "0.0.0");
+		} catch {
+			if (dirname(dir) === dir) return "0.0.0";
+		}
 	}
 })();
 

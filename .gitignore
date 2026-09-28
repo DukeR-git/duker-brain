@@ -1,6 +1,8 @@
-# Dependencies and build output
+# Dependencies
 node_modules/
-dist/
+
+# dist/ is committed on purpose: the Claude Code plugin runs those bundles
+# straight from the repository, with no npm install.
 
 # Local configuration: may hold an API key or a personal vault path
 brain-traverse.config.json

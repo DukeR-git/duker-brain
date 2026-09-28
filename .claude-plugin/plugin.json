@@ -1,0 +1,76 @@
+{
+  "name": "duker-brain",
+  "version": "1.1.0",
+  "description": "Dynamic context routing: on every prompt a fast decision model walks your Obsidian vault and adds only the note that applies. Plus 17 brain_* tools for building and maintaining the vault.",
+  "author": {
+    "name": "DukeR-git",
+    "url": "https://github.com/DukeR-git"
+  },
+  "homepage": "https://github.com/DukeR-git/duker-brain#readme",
+  "repository": "https://github.com/DukeR-git/duker-brain",
+  "license": "MIT",
+  "keywords": ["context-routing", "obsidian", "knowledge-base", "mcp", "jev", "laya"],
+  "userConfig": {
+    "vault_root": {
+      "type": "directory",
+      "title": "Vault folder",
+      "description": "The brain: an Obsidian vault with _index.json manifests. Leave empty to use the vault saved by /duker-brain:init.",
+      "default": ""
+    },
+    "api_key": {
+      "type": "string",
+      "title": "Decisions API key",
+      "description": "Your TypeSafe key (console.typesafe.ai/keys), or the LAYA_API_KEY of a self-hosted Laya. Leave empty to use TYPESAFE_API_KEY from your environment.",
+      "sensitive": true,
+      "default": ""
+    },
+    "decisions_url": {
+      "type": "string",
+      "title": "Decisions API URL",
+      "description": "Leave empty for the hosted TypeSafe Jev API. For a self-hosted Laya, e.g. http://my-server:8081.",
+      "default": ""
+    }
+  },
+  "commands": {
+    "init": { "source": "./claude-plugin/commands/init.md" },
+    "status": { "source": "./claude-plugin/commands/status.md" },
+    "capture": { "source": "./brain-keeper/commands/brain-capture.md" },
+    "research": { "source": "./brain-keeper/commands/brain-research.md" }
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/brain-hook.mjs\" prompt",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/brain-hook.mjs\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "brain": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/brain-keeper.mjs", "serve"],
+      "env": {
+        "CLAUDE_PLUGIN_OPTION_VAULT_ROOT": "${user_config.vault_root}",
+        "CLAUDE_PLUGIN_OPTION_API_KEY": "${user_config.api_key}",
+        "CLAUDE_PLUGIN_OPTION_DECISIONS_URL": "${user_config.decisions_url}"
+      }
+    }
+  }
+}
