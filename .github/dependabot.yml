@@ -8,6 +8,11 @@ updates:
     groups:
       npm-dependencies:
         patterns: ["*"]
+    ignore:
+      # The Node types follow the oldest supported Node (engines.node), not the
+      # newest release; newer majors type APIs that Node 22 does not have.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
