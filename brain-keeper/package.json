@@ -23,11 +23,11 @@
     "serve": "node bin/brain-keeper.mjs serve",
     "doctor": "node bin/brain-keeper.mjs doctor",
     "tree": "node bin/brain-keeper.mjs tree",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",

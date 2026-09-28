@@ -24,11 +24,11 @@
     "lint:vault": "node bin/brain-traverse.mjs lint",
     "health": "node bin/brain-traverse.mjs health",
     "bench": "node bin/brain-traverse.mjs bench",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "tsx": "^4.19.2"

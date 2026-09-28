@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/DukeR-git/duker-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/DukeR-git/duker-brain/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
+![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
 
 Dynamic context routing for coding agents. Your knowledge lives in a
 hierarchical Obsidian vault, "the brain". On every prompt, a fast System-1
@@ -42,7 +42,7 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
 
 ## Install
 
-You need Node.js 20 or newer, and a TypeSafe API key from
+You need Node.js 22 or newer, and a TypeSafe API key from
 [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
 
 ### Pi

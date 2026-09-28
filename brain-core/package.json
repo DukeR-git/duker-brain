@@ -17,11 +17,11 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "zod": "^4.0.0"

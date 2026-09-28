@@ -8,21 +8,46 @@ updates:
     groups:
       npm-dependencies:
         patterns: ["*"]
+    ignore:
+      # The Node types follow the oldest supported Node (engines.node), not the
+      # newest release; newer majors type APIs that Node 22 does not have.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
 
-  # host-laya pins exact versions in constraints.txt for a known-good Intel XPU
-  # stack, so these pull requests need testing on real hardware before merging.
+  # host-laya pins exact versions in constraints.txt, resolved together with the
+  # torch XPU build. The Intel GPU runtime has to move as one unit with torch
+  # (see the header of constraints.txt), so it is ignored here and upgraded by
+  # hand. Everything else arrives as one grouped pull request, which still needs
+  # a smoke test on real hardware before merging.
   - package-ecosystem: pip
     directory: /host-laya
     schedule:
       interval: monthly
-    open-pull-requests-limit: 3
+    groups:
+      host-laya-python:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "torch*"
+      - dependency-name: "triton-xpu"
+      - dependency-name: "intel-*"
+      - dependency-name: "onemkl-*"
+      - dependency-name: "dpcpp-cpp-rt"
+      - dependency-name: "mkl"
+      - dependency-name: "tbb"
+      - dependency-name: "tcmlib"
+      - dependency-name: "umf"
 
+  # The base image stays on the Ubuntu LTS the Intel GPU packages are built for.
+  # Patch updates of that release still come through.
   - package-ecosystem: docker
     directory: /host-laya
     schedule:
       interval: monthly
+    ignore:
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-major"]
