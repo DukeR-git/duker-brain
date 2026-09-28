@@ -11,6 +11,8 @@ All notable changes to this project are recorded here. The format follows
 - Node.js 22 or newer is now required. Node.js 20 reached end of life in April
   2026, and the test scripts rely on Node 22's built-in glob expansion, which
   Windows shells do not provide. CI tests Node 22 and 24.
+- Development now uses TypeScript 7. `@types/node` stays on Node 22, the
+  oldest supported version, so the types only offer APIs Node 22 has.
 
 ## [1.0.0] - 2026-09-28
 
