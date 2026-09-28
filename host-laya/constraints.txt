@@ -27,7 +27,7 @@ intel-cmplr-lib-ur==2026.1.0
 intel-cmplr-lic-rt==2026.1.0
 intel-opencl-rt==2026.1.0
 intel-openmp==2026.1.0
-intel-pti==1.0.1
+intel-pti==1.1.0
 intel-sycl-rt==2026.1.0
 Jinja2==3.1.6
 laya==0.3.11
