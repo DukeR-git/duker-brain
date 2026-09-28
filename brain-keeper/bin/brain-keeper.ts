@@ -16,7 +16,7 @@
  *   brain-keeper call brain_add_note '{"folder":"Backend", ...}'
  */
 
-import { readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,7 @@ import { withVaultLock } from "../../brain-core/src/fsutil.js";
 import { MANIFEST_FILE } from "../../brain-core/src/manifest.js";
 import { compileVault } from "../../brain-core/src/vault.js";
 import { loadConfig, requireVault, type KeeperConfig } from "../src/config.js";
+import { addBrain, renderAdd, renderStarters, renderUpdate, updateBrains } from "../src/brains.js";
 import { initVault, renderInit } from "../src/init.js";
 import { TOOLS, findTool, runTool } from "../src/tools.js";
 
@@ -35,6 +36,9 @@ const USAGE = `
 brain-keeper <command> [options]
 
   init <dir>                Create a vault (or adopt an existing one) and save it as the default
+  starters                  List the starter brains, and the shared brains this vault holds
+  add <source>              Add a shared brain as its own folder: a starter name, owner/repo[/folder][#ref], or a git URL
+  update [folder]           Pull new and changed notes into shared brains, keeping your edits
   setup                     Print the commands that connect this server to Claude Code and Codex
   serve                     Run the MCP server on stdio (what a harness launches)
   tools                     List the tools this server exposes
@@ -57,14 +61,16 @@ Options
   --depth <n>               Tree depth (default 3)
   --limit <n>               Most search results (default 10)
   --expect <id>             Expected destination for the last check prompt
-  --dry-run                 For rebuild, init and export: report without writing
+  --dry-run                 For rebuild, init, add, update and export: report without writing
   --example                 For init: include the example notes
+  --starter <source>        For init: add a shared brain too, e.g. --starter python-backend
+  --as <folder>             For add: the vault folder to put the brain in (default: its name)
   --no-config               For init: do not save the vault to the user config
 
 Flags also accept --name=value.
 `.trim();
 
-const VALUE_FLAGS = new Set(["vault", "url", "depth", "expect", "limit", "format", "out"]);
+const VALUE_FLAGS = new Set(["vault", "url", "depth", "expect", "limit", "format", "out", "starter", "as"]);
 
 function configFrom(args: Args): KeeperConfig {
 	const overrides: Partial<KeeperConfig> = {};
@@ -150,14 +156,57 @@ async function main(): Promise<number> {
 				process.stderr.write("init needs a directory, e.g. brain-keeper init ~/brain\n");
 				return 2;
 			}
+			const dryRun = args.flags["dry-run"] === true;
 			const result = initVault({
 				dir,
 				example: args.flags.example === true,
 				saveConfig: args.flags["no-config"] !== true,
-				dryRun: args.flags["dry-run"] === true,
+				dryRun,
 			});
 			process.stdout.write(renderInit(result) + "\n");
+			if (typeof args.flags.starter === "string") {
+				// A dry run of a vault that does not exist yet still shows what the brain would add.
+				const added = addBrain({ vaultRoot: result.vaultRoot, source: args.flags.starter, dryRun: dryRun || !existsSync(result.vaultRoot) });
+				process.stdout.write("\n" + renderAdd(added) + "\n");
+			}
 			return 0;
+		}
+
+		case "starters": {
+			let vaultRoot: string | undefined;
+			try {
+				vaultRoot = configFrom(args).vaultRoot || undefined;
+			} catch {
+				/* listing starters needs no vault */
+			}
+			process.stdout.write(renderStarters(vaultRoot) + "\n");
+			return 0;
+		}
+
+		case "add": {
+			const source = args.positional[0];
+			if (!source) {
+				process.stderr.write("add needs a source, e.g. brain-keeper add python-backend, or brain-keeper add owner/repo\n");
+				return 2;
+			}
+			const result = addBrain({
+				vaultRoot: requireVault(configFrom(args)),
+				source,
+				as: typeof args.flags.as === "string" ? args.flags.as : undefined,
+				dryRun: args.flags["dry-run"] === true,
+			});
+			process.stdout.write(renderAdd(result) + "\n");
+			return 0;
+		}
+
+		case "update": {
+			const result = updateBrains({
+				vaultRoot: requireVault(configFrom(args)),
+				folder: args.positional[0],
+				dryRun: args.flags["dry-run"] === true,
+			});
+			process.stdout.write(renderUpdate(result) + "\n");
+			return result.updates.some((update) => update.error) ? 1 : 0;
 		}
 
 		case "setup":

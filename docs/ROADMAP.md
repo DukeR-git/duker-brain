@@ -34,8 +34,11 @@ routing. See [CHANGELOG.md](../CHANGELOG.md).
   `[[links]]` to, so the agent can fetch them with `brain_get_note`.
 - **Optional git journaling** (`"autoGitCommit": true`): commit the vault after
   each keeper write, with a message naming the tool and the note.
-- **Example vault guide.** A README for `pi-traverser/fixtures/vault` explaining
-  how its `criteria` were written, as a model for new vaults.
+- **More starter brains**: TypeScript and React, DevOps (Docker, GitHub Actions,
+  deployment), and working with coding agents. See
+  [brains/README.md](../brains/README.md#contributing-a-starter-brain).
+- **Finding shared brains**: list repositories tagged with the `duker-brain`
+  GitHub topic from `brain-keeper starters`.
 
 ## Routing
 

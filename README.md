@@ -35,16 +35,71 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
 - **Keeper**: 17 `brain_*` tools for adding to, searching, maintaining, evaluating and
   exporting the brain, plus commands to capture and research knowledge into it. They
   are native tools in Pi, and an MCP server for Claude Code, Codex and any other MCP client.
-- **Decisions API**: the hosted [TypeSafe Jev](https://docs.typesafe.ai) API by
-  default, which needs nothing installed besides an API key. A self-hosted
-  [Laya](https://pypi.org/project/laya/) server works too (see [host-laya](host-laya)).
+- **Decision model**: picks the note at each step. Either the hosted
+  [TypeSafe Jev](https://docs.typesafe.ai) API, which needs only an API key, or
+  [Laya](https://pypi.org/project/laya/), an open model you run on your own
+  machine. See [Choose a decision model](#choose-a-decision-model).
+- **Starter brains**: ready-made notes you can add in one command, and a way to
+  share your own brain through GitHub. See [Starter and shared brains](#starter-and-shared-brains).
+
+---
+
+## Choose a decision model
+
+At each folder of the brain, a decision model reads the prompt and the
+`criteria` of the notes and subfolders there, and picks one. You can use either
+of two models. They answer the same API, so you can switch later by changing
+one setting.
+
+| | **TypeSafe Jev** (hosted, the default) | **Laya** (local, self-hosted) |
+|---|---|---|
+| What it is | TypeSafe's hosted decisions API | The open [Laya](https://pypi.org/project/laya/) model on your own hardware, served by [host-laya](host-laya) |
+| What you need | An API key from [console.typesafe.ai/keys](https://console.typesafe.ai/keys) | A Linux machine with Docker. The packaged image targets an Intel Arc GPU (about 1.7 GB of VRAM) |
+| Cost | [TypeSafe's pricing](https://docs.typesafe.ai) | Your own hardware |
+| What leaves your machine | Each prompt, cut to 1,500 characters (`maxPromptChars`), and the `criteria` of the notes being chosen between. The notes' contents are never sent | Nothing, when the host is on your own network |
+| Speed | A network round trip per step, capped at 2 s per request and 3 s per prompt | About 35 ms per step on a local network, capped at 0.5 s and 1 s |
+| To set up | Add the key. Nothing to run | Run host-laya, then point `decisionsUrl` at it |
+
+If the model is slow or unreachable, the prompt goes ahead without a note:
+routing pauses and retries later, and it never blocks your agent.
+
+### Use TypeSafe Jev
+
+Get a key at [console.typesafe.ai/keys](https://console.typesafe.ai/keys) and
+give it to duker-brain in one of these ways:
+
+- **Claude Code:** the plugin's *Decisions API key* setting. Claude Code asks for
+  it when you enable the plugin and keeps it in your system's credential store.
+- **Anywhere:** the `TYPESAFE_API_KEY` environment variable.
+
+Leave the decisions URL empty: Jev is the default.
+
+### Use a local Laya model
+
+1. **Start the decisions service** on a machine you control.
+   [host-laya](host-laya) is the reference deployment: a Docker image for Ubuntu
+   with an Intel Arc GPU, which you start with `docker compose up -d`. Laya
+   itself also runs on NVIDIA GPUs (CUDA) and on the CPU (`LAYA_DEVICE=cuda` or
+   `cpu`), but only the Intel Arc image is packaged today, so on other hardware
+   you adapt its Dockerfile. On a CPU, expect about 200 ms per decision.
+2. **Point duker-brain at it.** In Claude Code, set the plugin's *Decisions API
+   URL* to the service, for example `http://my-server:8081`. Anywhere else, put
+   `"decisionsUrl": "http://my-server:8081"` in
+   `~/.config/brain-traverse/config.json`, or set `BRAIN_DECISIONS_URL`.
+3. **No API key is needed,** unless you started host-laya with `LAYA_API_KEY`.
+   Do that whenever the service is reachable from other machines, and give
+   duker-brain the same value as its API key (the plugin setting, or
+   `BRAIN_DECISIONS_API_KEY`).
+
+To see which model is in use and whether it answers, run `/duker-brain:status`
+in Claude Code, `/brain status` in Pi, or `brain-traverse health`.
 
 ---
 
 ## Install
 
-You need Node.js 22 or newer on your `PATH`, and a TypeSafe API key from
-[console.typesafe.ai/keys](https://console.typesafe.ai/keys).
+You need Node.js 22 or newer on your `PATH`, and a decision model:
+[a TypeSafe API key, or a local Laya service](#choose-a-decision-model).
 
 ### Claude Code (plugin)
 
@@ -56,24 +111,28 @@ Inside Claude Code:
 ```
 
 When you enable the plugin, it asks for three optional settings: the vault
-folder, your API key (kept in your system's secure credential store) and the
-decisions API URL. Leave them empty to use `TYPESAFE_API_KEY` and the config
-file instead. Then create a brain and check that routing works:
+folder, the decisions API key and the decisions API URL. For TypeSafe Jev, fill
+in the key; for a local Laya, fill in the URL (see
+[Choose a decision model](#choose-a-decision-model)). Leave them empty to use
+`TYPESAFE_API_KEY` and the config file instead. Then create a brain, here
+starting from the Python backend starter, and check that routing works:
 
 ```
-/duker-brain:init ~/brain --example
+/duker-brain:init ~/brain --starter python-backend
 /duker-brain:status
 ```
 
 From then on every prompt is routed, and the matching note is added as context.
 When a note goes in, Claude Code shows one line such as
 `brain: asyncpg_pooling 0.93 53ms`; set `displayInjection` to `false` to hide
-it. You also get the 17 `brain_*` tools and four commands:
+it. You also get the 17 `brain_*` tools and these commands:
 
 | Command | What it does |
 |---|---|
-| `/duker-brain:init <dir> [--example]` | Create a brain, or adopt an existing Obsidian vault, and make it the default |
+| `/duker-brain:init <dir> [--starter <name>]` | Create a brain, or adopt an existing Obsidian vault, and make it the default |
 | `/duker-brain:status` | Settings, service health and what the last prompt routed to |
+| `/duker-brain:add <source>` | Add a starter brain or someone's shared brain as its own folder |
+| `/duker-brain:update [folder]` | Pull new and changed notes into the brains you added, keeping your edits |
 | `/duker-brain:capture` | File what is worth keeping from this session into the brain |
 | `/duker-brain:research <topic>` | Research a topic and write it up as a note |
 
@@ -86,21 +145,21 @@ the next prompt gets the full note again.
 
 ```bash
 pi install git:github.com/DukeR-git/duker-brain
-export TYPESAFE_API_KEY=sk-...
+export TYPESAFE_API_KEY=sk-...   # for TypeSafe Jev; for a local Laya, set decisionsUrl instead
 ```
 
 That installs the router, the 17 brain tools, and the `/brain`,
-`/brain-init`, `/brain-capture`, `/brain-research` and `/brain-export` commands. Then create a
-brain from inside Pi and reload:
+`/brain-init`, `/brain-add`, `/brain-update`, `/brain-capture`, `/brain-research`
+and `/brain-export` commands. Then create a brain from inside Pi and reload:
 
 ```
-/brain-init ~/brain --example
+/brain-init ~/brain --starter python-backend
 /brain reload
 ```
 
-`--example` adds a small sample tree (Backend / Frontend / Infrastructure) so
-routing has something to do straight away. Leave it out to start with just the
-catch-all note. `/brain status` shows whether routing is live, and `/brain help`
+`--starter` adds a [starter brain](#starter-and-shared-brains) so routing has
+something to do straight away; `--example` adds a small sample tree instead.
+Leave both out to start with just the catch-all note. `/brain status` shows whether routing is live, and `/brain help`
 lists all in-session subcommands.
 
 Pointing `/brain-init` at an existing Obsidian vault is safe: it never
@@ -119,7 +178,7 @@ routing on every prompt is available for Claude Code (above) and Pi.
 git clone https://github.com/DukeR-git/duker-brain
 cd duker-brain
 npm install
-node brain-keeper/bin/brain-keeper.mjs init ~/brain --example
+node brain-keeper/bin/brain-keeper.mjs init ~/brain --starter python-backend
 node brain-keeper/bin/brain-keeper.mjs setup
 ```
 
@@ -138,6 +197,40 @@ It also says where to copy the two command files. See
 Already using Pi? The package is cloned at
 `~/.pi/agent/git/github.com/DukeR-git/duker-brain`, so you can point the MCP
 commands there instead of cloning again.
+
+## Starter and shared brains
+
+You do not have to start from an empty brain. A **starter brain** is a
+ready-made set of notes, with routing criteria and evals, that goes into your
+brain as one folder:
+
+```bash
+brain-keeper starters                 # what is available
+brain-keeper add python-backend       # add one to the brain you have
+brain-keeper init ~/brain --starter python-backend   # or start a new brain with it
+```
+
+| Starter | What it covers |
+|---|---|
+| [python-backend](brains/python-backend) | FastAPI, asyncio, SQLAlchemy 2.0 and PostgreSQL, Alembic, pytest, uv |
+
+**Anyone's brain on GitHub works the same way**, so a team can keep its
+knowledge in one repository and everyone adds it:
+
+```bash
+brain-keeper add your-org/team-brain            # a whole repository
+brain-keeper add your-org/monorepo/brains/go    # one folder in it
+brain-keeper add your-org/team-brain#v2         # at a tag or branch
+```
+
+`brain-keeper update` later pulls in new and changed notes. A note you edited
+is kept, and the update tells you it also changed upstream. Only Markdown notes
+and `evals.json` are copied, never scripts, but the notes do reach your coding
+agent as context, so only add brains from sources you trust.
+
+In Claude Code these are `/duker-brain:add` and `/duker-brain:update`, and in
+Pi `/brain-add` and `/brain-update`. To publish your own brain, and for the
+details of how updates work, see [brains/README.md](brains/README.md).
 
 ## Configuration
 
@@ -167,24 +260,16 @@ key; the full reference is in [pi-traverser](pi-traverser/README.md#6-configurat
 The router and the keeper read the same settings, so `brain_check_routing`
 predicts exactly what the router will do.
 
-### Self-hosting the decisions model
+### Timeouts
 
-Jev and Laya speak the same request and response shape on
-`POST /v1/systemone`, so switching is a one-line change:
-
-```json
-{ "decisionsUrl": "http://my-server:8081" }
-```
-
-A decisions URL on the local network (localhost, `192.168.x.x`, `10.x`, a
-bare host name, `*.local`) gets tight defaults: 500 ms per request and 1 s per
-route. A remote URL gets 2 s and 3 s.
-
-[host-laya](host-laya) is a reference deployment: a Jev-compatible FastAPI
-service around a local Laya checkpoint, Dockerised for an Intel Arc GPU. It is
-specific to that hardware and is not installed by `pi install`. Treat it as a
-starting point. If it is reachable from other machines, start it with
-`LAYA_API_KEY` and give clients the same key as `BRAIN_DECISIONS_API_KEY`.
+Jev and Laya answer the same request on `POST /v1/systemone`, so only
+`decisionsUrl` (and the key) differ between them; see
+[Choose a decision model](#choose-a-decision-model). A decisions URL on the
+local network (localhost, `192.168.x.x`, `10.x`, a bare host name, `*.local`)
+gets tight defaults: 500 ms per request and 1 s per route. A remote URL gets
+2 s and 3 s. Set `timeoutMs` and `routeBudgetMs` to override them.
+[host-laya](host-laya) is not installed by `pi install` or the Claude Code
+plugin; it runs on the machine that has the GPU.
 
 ## Writing the brain
 
@@ -220,6 +305,7 @@ still the best undo.
 |---|---|
 | [pi-traverser](pi-traverser) | The router: the Pi extension, the Claude Code hook, and the `brain-traverse` CLI for tuning routes without launching an agent. |
 | [.claude-plugin](.claude-plugin), [claude-plugin](claude-plugin) | The Claude Code plugin and marketplace manifests, and the plugin's own commands. |
+| [brains](brains) | The starter brains, and how to share your own. |
 | [dist](dist) | Self-contained bundles of the CLIs and the hook, built by `npm run build` and committed, because the plugin runs them without an install. |
 | [brain-keeper](brain-keeper) | The authoring tools: Pi tools, the MCP server, the `brain-keeper` CLI and the two commands. |
 | [brain-core](brain-core) | Shared by both: vault schema, frontmatter parser, compiler, traversal engine and decisions client. |
@@ -246,6 +332,8 @@ node pi-traverser/bin/brain-traverse.mjs eval        # run routing regression ev
 node pi-traverser/bin/brain-traverse.mjs health     # which backend, and is the key accepted?
 node pi-traverser/bin/brain-traverse.mjs stats      # what gets injected, what never does, near ties, cache hits
 node brain-keeper/bin/brain-keeper.mjs doctor       # vault health
+node brain-keeper/bin/brain-keeper.mjs add python-backend  # add a starter or shared brain
+node brain-keeper/bin/brain-keeper.mjs update       # update the brains you added
 node brain-keeper/bin/brain-keeper.mjs export --format cursor # export rules to .cursor/rules/
 node brain-keeper/bin/brain-keeper.mjs search "pgbouncer"
 node brain-keeper/bin/brain-keeper.mjs tree --criteria
@@ -263,7 +351,7 @@ npm run build       # rebuild the self-contained dist/ bundles (commit the resul
 ```
 brain-core     171   vault model, compiler, config, traversal, cache, evals, exporter
 pi-traverser    71   the Pi extension, the Claude Code hook, injection formatting, config, CLI
-brain-keeper    84   operations, the 17-tool surface, Pi registration, export, MCP server
+brain-keeper   109   operations, the 17-tool surface, shared brains, Pi registration, MCP server
 host-laya       22   the HTTP layer against a stub engine (pytest; no torch needed)
 ```
 

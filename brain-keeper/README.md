@@ -25,8 +25,9 @@ agent ──tools / MCP──> brain-keeper ──> Obsidian vault (.md + _about
 
 Nothing extra: `pi install git:github.com/DukeR-git/duker-brain` (see the
 [root README](../README.md#pi)) registers all 17 tools natively, along with
-`/brain-capture`, `/brain-research`, `/brain-export` and `/brain-init`. `/brain-init ~/brain`
-creates a vault and makes it the default; `--dry-run` previews it.
+`/brain-capture`, `/brain-research`, `/brain-export`, `/brain-init`, `/brain-add` and
+`/brain-update`. `/brain-init ~/brain` creates a vault and makes it the default;
+`--starter python-backend` adds a starter brain to it, and `--dry-run` previews it.
 
 ### Claude Code, Codex and other MCP clients
 
@@ -34,7 +35,7 @@ From a checkout of the repository:
 
 ```bash
 npm install                                            # at the repository root
-node brain-keeper/bin/brain-keeper.mjs init ~/brain    # add --example for a sample tree
+node brain-keeper/bin/brain-keeper.mjs init ~/brain    # add --starter python-backend to start with notes
 node brain-keeper/bin/brain-keeper.mjs setup           # prints the commands below, with real paths
 ```
 
@@ -168,6 +169,32 @@ Both end the same way: `brain_check_routing` to prove the note is reachable, the
 These are prompts rather than code because deciding what is worth keeping, and
 how to phrase criteria that discriminate, is judgement. The mechanical half —
 writing the file, keeping the index consistent, checking routing — is the tools.
+
+### Shared brains: `starters`, `add`, `update`
+
+A shared brain is a folder of notes someone published: a starter from this
+repository's [brains/](../brains) folder, or any git repository or folder in one.
+
+```bash
+brain-keeper starters                          # starter brains, and the shared brains this vault holds
+brain-keeper add python-backend                # a starter, by name
+brain-keeper add someone/their-brain#v2        # GitHub: owner/repo[/folder][#ref], or a URL
+brain-keeper add ./my-brain --as Languages/go  # a folder on disk, into a folder you choose
+brain-keeper update [folder] [--dry-run]       # pull changes, keeping your edits
+```
+
+`add` copies the brain's notes (and only its Markdown notes, plus its
+`evals.json`, merged into the vault's with ids prefixed by the folder) into a
+new folder, recompiles, and records the source and a hash of every file in
+`.brain-sources.json`. `update` uses those hashes: a note still exactly as it
+arrived is replaced, a note you edited is kept and reported, a new upstream
+note is added, and a note you deleted stays deleted. Git sources are fetched
+with a shallow `git clone`, so `git` must be on the `PATH`.
+
+These are commands, not MCP tools, on purpose: pulling someone else's notes
+into the context your agent reads is a decision for you to make, not one the
+agent should make on its own. `/duker-brain:add` in Claude Code and
+`/brain-add` in Pi run the same code when you ask for it.
 
 ## 5. The authoring model
 
@@ -315,18 +342,19 @@ against a broken config file. It also runs the CLI as a real process.
 
 ```
 brain-keeper/
-├── pi.ts                Pi extension: the tools as native Pi tools, plus /brain-init
+├── pi.ts                Pi extension: the tools as native Pi tools, plus /brain-init, /brain-add, /brain-update
 ├── src/
 │   ├── server.ts        MCP stdio server
 │   ├── tools.ts         the 15 tool definitions, zod schemas, descriptions and annotations
 │   ├── operations.ts    every vault mutation (locked, atomic, recompiled), and search
 │   ├── init.ts          create or adopt a vault, save it to the user config
+│   ├── brains.ts        shared brains: sources, add, update, the starter list
 │   ├── report.ts        tree, issue and diff rendering
 │   ├── routing.ts       brain_check_routing, via brain-core's real traverser
 │   └── config.ts        brain-core's shared config, plus the lazy loader the server uses
 ├── bin/
 │   ├── brain-keeper.mjs launcher: registers tsx, runs the CLI
-│   └── brain-keeper.ts  serve, init, setup, watch, and a CLI over the same tools
+│   └── brain-keeper.ts  serve, init, add, update, setup, watch, and a CLI over the same tools
 ├── commands/            /brain-capture and /brain-research, plus install notes
 └── test/
 ```

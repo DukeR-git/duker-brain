@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Starter and shared brains.** `brain-keeper add <source>` adds a ready-made
+  brain to yours as its own folder: a starter by name, any GitHub repository or
+  folder in one (`owner/repo[/folder][#ref]`), another git URL, or a folder on
+  disk. `brain-keeper update` pulls in new and changed notes and keeps the
+  ones you edited, using the source and file hashes recorded in
+  `.brain-sources.json`. `brain-keeper starters` lists what is available, and
+  `init --starter <source>` starts a new brain with one. Only Markdown notes and
+  `evals.json` are copied; a brain's evals are merged into the vault's suite.
+  Also available as `/duker-brain:add` and `/duker-brain:update` in Claude Code,
+  and `/brain-add` and `/brain-update` in Pi.
+- The first starter brain, `python-backend`: FastAPI, asyncio, SQLAlchemy 2.0
+  and PostgreSQL, Alembic, pytest and uv, in 10 notes with 12 routing evals.
+
+### Changed
+
+- The README now presents the decision model as a choice between the hosted
+  TypeSafe Jev API and a local, self-hosted Laya model, including what each one
+  sends off your machine.
+
 ## [1.1.0] - 2026-09-28
 
 ### Added

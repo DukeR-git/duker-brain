@@ -1,0 +1,9 @@
+{
+  "name": "python-backend",
+  "title": "Python Backend",
+  "description": "Python backend services: FastAPI APIs, async I/O, PostgreSQL with SQLAlchemy and Alembic, pytest, and packaging with uv.",
+  "version": "1.0.0",
+  "author": "DukeR-git",
+  "license": "MIT",
+  "homepage": "https://github.com/DukeR-git/duker-brain/tree/main/brains/python-backend"
+}

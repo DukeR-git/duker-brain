@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "defaults": {
+    "minConfidence": 0.4
+  },
+  "evals": [
+    {
+      "id": "router-layout",
+      "prompt": "How should I split my FastAPI app into routers and where do startup and shutdown hooks go?",
+      "expected": "py_fastapi_app_structure",
+      "tags": ["fastapi"]
+    },
+    {
+      "id": "settings",
+      "prompt": "Load configuration from environment variables with pydantic-settings in FastAPI",
+      "expected": "py_fastapi_app_structure",
+      "tags": ["fastapi", "config"]
+    },
+    {
+      "id": "patch-update",
+      "prompt": "My PATCH endpoint overwrites fields the client did not send with null. How do I do a partial update with Pydantic v2?",
+      "expected": "py_fastapi_models_errors",
+      "tags": ["fastapi", "pydantic"]
+    },
+    {
+      "id": "validation-error",
+      "prompt": "Change the shape of the 422 validation error response in FastAPI",
+      "expected": "py_fastapi_models_errors",
+      "tags": ["fastapi", "errors"]
+    },
+    {
+      "id": "jwt",
+      "prompt": "Protect my endpoints with JWT bearer tokens and a current user dependency",
+      "expected": "py_fastapi_auth",
+      "tags": ["fastapi", "security"]
+    },
+    {
+      "id": "missing-greenlet",
+      "prompt": "Accessing user.orders raises MissingGreenlet greenlet_spawn has not been called with an async session",
+      "expected": "py_sqlalchemy_async",
+      "tags": ["sqlalchemy"]
+    },
+    {
+      "id": "autogenerate-rename",
+      "prompt": "Alembic autogenerate wants to drop and recreate a column I only renamed",
+      "expected": "py_alembic_migrations",
+      "tags": ["alembic"]
+    },
+    {
+      "id": "concurrent-index",
+      "prompt": "Add an index to a large PostgreSQL table in a migration without locking writes",
+      "expected": "py_alembic_migrations",
+      "tags": ["alembic", "postgres"]
+    },
+    {
+      "id": "slow-offset",
+      "prompt": "Paging through orders with OFFSET gets slower and slower on later pages",
+      "expected": "py_postgres_performance",
+      "tags": ["postgres"]
+    },
+    {
+      "id": "blocking-call",
+      "prompt": "Every request stalls while one endpoint calls requests.get inside an async def",
+      "expected": "py_asyncio_pitfalls",
+      "tags": ["asyncio"]
+    },
+    {
+      "id": "test-client",
+      "prompt": "How do I test FastAPI endpoints with httpx and override the database dependency?",
+      "expected": "py_pytest_testing",
+      "tags": ["testing"]
+    },
+    {
+      "id": "uv-docker",
+      "prompt": "Install dependencies from uv.lock in a Dockerfile with good layer caching",
+      "expected": "py_packaging_uv",
+      "tags": ["packaging"]
+    }
+  ]
+}

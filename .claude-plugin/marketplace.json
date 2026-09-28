@@ -9,7 +9,7 @@
     {
       "name": "duker-brain",
       "source": "./",
-      "description": "On every prompt, route through your Obsidian vault and add only the note that applies. Includes 17 brain_* tools and the init, status, capture and research commands.",
+      "description": "On every prompt, route through your Obsidian vault and add only the note that applies. Includes 17 brain_* tools, starter brains, and commands to set up, share and grow the brain.",
       "category": "productivity"
     }
   ]

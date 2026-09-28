@@ -34,6 +34,8 @@
   "commands": {
     "init": { "source": "./claude-plugin/commands/init.md" },
     "status": { "source": "./claude-plugin/commands/status.md" },
+    "add": { "source": "./claude-plugin/commands/add.md" },
+    "update": { "source": "./claude-plugin/commands/update.md" },
     "capture": { "source": "./brain-keeper/commands/brain-capture.md" },
     "research": { "source": "./brain-keeper/commands/brain-research.md" }
   },
