@@ -1,0 +1,16 @@
+[
+  {
+    "id": "docker_deploy",
+    "type": "leaf",
+    "criteria": "Dockerfiles and image layer caching, docker compose services, container networking and ports, GPU device passthrough",
+    "targetPath": "docker_deploy.md",
+    "title": "Docker Deployment"
+  },
+  {
+    "id": "github_actions",
+    "type": "leaf",
+    "criteria": "GitHub Actions CI workflows, matrix builds, dependency caching with lockfile keys, runners, secrets on fork pull requests",
+    "targetPath": "github_actions.md",
+    "title": "GitHub Actions"
+  }
+]

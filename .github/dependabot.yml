@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # One grouped pull request per week for the npm workspace (all three packages).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # host-laya pins exact versions in constraints.txt for a known-good Intel XPU
+  # stack, so these pull requests need testing on real hardware before merging.
+  - package-ecosystem: pip
+    directory: /host-laya
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: docker
+    directory: /host-laya
+    schedule:
+      interval: monthly

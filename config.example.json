@@ -1,0 +1,32 @@
+{
+  "_comment": "Copy to ~/.config/brain-traverse/config.json (all projects) or ./brain-traverse.config.json (one project). Every key is optional except vaultRoot; BRAIN_* env vars override anything set here. Keys starting with _ are ignored; any other unknown key is reported by `brain-traverse config`.",
+
+  "enabled": true,
+  "vaultRoot": "~/brain",
+
+  "_comment_apiKey": "Optional bearer token: required for Jev and a password-protected Laya host. Prefer the TYPESAFE_API_KEY environment variable.",
+  "apiKey": "",
+
+  "decisionsUrl": "https://api.typesafe.ai",
+  "decisionsPath": "/v1/systemone",
+  "model": "jev-latest",
+  "timeoutMs": 0,
+  "retries": 1,
+  "routeBudgetMs": 0,
+
+  "maxHops": 4,
+  "minConfidence": 0.4,
+  "minActProbability": 0,
+  "gateEnabled": true,
+  "gateThreshold": 0.5,
+
+  "fallbackDocument": "auto",
+  "maxDocumentChars": 12000,
+  "maxPromptChars": 1500,
+
+  "watchManifests": true,
+  "displayInjection": true,
+  "reinjectAfterTurns": 8,
+  "routeLog": "auto",
+  "logLevel": "info"
+}

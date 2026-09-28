@@ -1,0 +1,30 @@
+[
+  {
+    "id": "asyncpg_pooling",
+    "type": "leaf",
+    "criteria": "PostgreSQL connections, asyncpg pool sizing and lifespan setup, acquiring and releasing connections, PgBouncer transaction mode, statement cache errors",
+    "targetPath": "asyncpg_pooling.md",
+    "title": "asyncpg Connection Pooling"
+  },
+  {
+    "id": "celery_jobs",
+    "type": "leaf",
+    "criteria": "Celery workers and tasks, task retries and backoff, idempotent side effects, scheduling periodic jobs, message brokers",
+    "targetPath": "celery_jobs.md",
+    "title": "Background Jobs"
+  },
+  {
+    "id": "fastapi_core",
+    "type": "leaf",
+    "criteria": "FastAPI routing and routers, middleware, Depends dependency injection, lifespan startup and teardown, uvicorn workers",
+    "targetPath": "fastapi_core.md",
+    "title": "FastAPI Core"
+  },
+  {
+    "id": "sql_indexing",
+    "type": "leaf",
+    "criteria": "Slow SQL queries, EXPLAIN ANALYZE query plans, B-tree and partial indexes, composite index column order, vacuum and bloat",
+    "targetPath": "sql_indexing.md",
+    "title": "SQL Indexing"
+  }
+]

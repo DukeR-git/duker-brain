@@ -1,0 +1,8 @@
+# What the host-laya tests need: the API layer and pytest. No torch, no laya:
+# the tests run the HTTP layer against a stub engine.
+#   pip install -r requirements-test.txt && pytest
+
+fastapi==0.141.1
+pydantic==2.13.5
+httpx==0.28.1
+pytest==9.0.2

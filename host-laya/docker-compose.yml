@@ -1,0 +1,81 @@
+services:
+  laya:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: brain-traverse/host-laya:1.0.0
+    container_name: laya
+    restart: unless-stopped
+
+    # Published on 127.0.0.1 unless LAYA_BIND_HOST says otherwise. To serve the
+    # LAN, set LAYA_BIND_HOST=0.0.0.0 *and* LAYA_API_KEY in .env (see the README).
+    ports:
+      - "${LAYA_BIND_HOST:-127.0.0.1}:${LAYA_PORT:-8081}:8081"
+
+    # Intel GPU passthrough. /dev/dri is the whole story for Level Zero + OpenCL;
+    # there is no runtime plugin to install the way there is for NVIDIA.
+    devices:
+      - "/dev/dri:/dev/dri"
+
+    # The container user must be in the host's render (and video) groups to open
+    # renderD128. GIDs are host-specific - scripts/host_preflight.sh writes them
+    # into .env for you.
+    group_add:
+      - "${RENDER_GID:-993}"
+      - "${VIDEO_GID:-44}"
+
+    # Level Zero stages host<->device copies through /dev/shm. A private,
+    # larger shm is enough; sharing the host's IPC namespace (ipc: host) is not
+    # needed and would also make shm_size ignored.
+    shm_size: "1gb"
+
+    environment:
+      # The address *inside* the container; what the host exposes is `ports` above.
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8081"
+
+      # Empty = no auth. Set it in .env when the port is reachable from the LAN;
+      # clients then send it as BRAIN_DECISIONS_API_KEY.
+      LAYA_API_KEY: "${LAYA_API_KEY:-}"
+
+      # English checkpoint only: ModernBERT-large 421M, the smallest resident
+      # footprint, which matters because llama.cpp already owns most of the card.
+      LAYA_CHECKPOINT: "${LAYA_CHECKPOINT:-english}"
+      LAYA_REPO_ID: "${LAYA_REPO_ID:-convaiinnovations/laya}"
+      LAYA_SERVED_MODEL_NAME: "${LAYA_SERVED_MODEL_NAME:-laya-english}"
+
+      LAYA_DEVICE: "${LAYA_DEVICE:-xpu}"
+      # fp32 is the safe default. Try bfloat16 for ~1.5-2x speed, then re-run
+      # scripts/smoke_test.py and confirm the probabilities still look right.
+      LAYA_DTYPE: "${LAYA_DTYPE:-auto}"
+      LAYA_ALLOW_CPU_FALLBACK: "${LAYA_ALLOW_CPU_FALLBACK:-true}"
+
+      LAYA_WARMUP_ITERATIONS: "${LAYA_WARMUP_ITERATIONS:-3}"
+      LAYA_REQUEST_TIMEOUT_S: "${LAYA_REQUEST_TIMEOUT_S:-30}"
+      LAYA_CHOICE_OPTION_LIMIT: "${LAYA_CHOICE_OPTION_LIMIT:-15}"
+      LAYA_CHOICE_OPTION_LIMIT_ENFORCE: "${LAYA_CHOICE_OPTION_LIMIT_ENFORCE:-false}"
+      LAYA_STATE_MODE: "${LAYA_STATE_MODE:-passthrough}"
+      LAYA_LOG_LEVEL: "${LAYA_LOG_LEVEL:-INFO}"
+      LAYA_LOG_DECISIONS: "${LAYA_LOG_DECISIONS:-true}"
+
+      # To pin Laya to one card/tile when llama.cpp is on another, uncomment and
+      # set an index (e.g. "1"). Leave it commented to share device 0 with Qwen -
+      # Laya needs well under 2GB. An EMPTY value here would hide every device
+      # from Level Zero, which is why this is not wired to a ${VAR:-} default.
+      # ZE_AFFINITY_MASK: "1"
+
+    volumes:
+      # Checkpoint cache survives image rebuilds; without it every `docker compose
+      # build` costs you the download again.
+      - laya-hf-cache:/opt/hf-cache
+
+    # The healthcheck lives in the Dockerfile, so the image carries it everywhere.
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  laya-hf-cache:

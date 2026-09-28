@@ -1,0 +1,16 @@
+[
+  {
+    "id": "css_layout",
+    "type": "leaf",
+    "criteria": "CSS layout bugs, flexbox shrinking and min-width, grid template areas, responsive breakpoints, z-index and stacking contexts",
+    "targetPath": "css_layout.md",
+    "title": "CSS Layout"
+  },
+  {
+    "id": "react_state",
+    "type": "leaf",
+    "criteria": "React component state, hooks and useEffect, context providers, lifting state up, unnecessary rerenders and memoisation",
+    "targetPath": "react_state.md",
+    "title": "React State"
+  }
+]

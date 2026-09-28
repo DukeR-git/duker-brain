@@ -1,0 +1,29 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Local configuration: may hold an API key or a personal vault path
+brain-traverse.config.json
+.env
+.env.*
+!.env.example
+
+# Logs and state
+*.log
+npm-debug.log*
+*.jsonl
+.brain.lock
+.brain.cache.json
+
+# Python (host-laya)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

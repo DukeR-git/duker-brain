@@ -1,0 +1,31 @@
+[
+  {
+    "id": "backend",
+    "type": "branch",
+    "criteria": "Server-side APIs, databases, connection pooling, background jobs, authentication, and message queues",
+    "targetPath": "Backend",
+    "title": "Backend"
+  },
+  {
+    "id": "frontend",
+    "type": "branch",
+    "criteria": "React components, CSS layout, browser state, bundlers, accessibility, and client-side routing",
+    "targetPath": "Frontend",
+    "title": "Frontend"
+  },
+  {
+    "id": "infrastructure",
+    "type": "branch",
+    "criteria": "Dockerfiles, container orchestration, CI pipelines, cloud provisioning, and deployment automation",
+    "targetPath": "Infrastructure",
+    "title": "Infrastructure"
+  },
+  {
+    "id": "general_instructions",
+    "type": "leaf",
+    "criteria": "General coding conventions when no specific domain manual matches",
+    "targetPath": "general_instructions.md",
+    "title": "General Instructions",
+    "fallback": true
+  }
+]

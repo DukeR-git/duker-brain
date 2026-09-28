@@ -1,0 +1,44 @@
+name: Routing report
+description: The router injected the wrong note, no note, or a catch-all when a better note existed.
+labels: [routing]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most routing problems come from `criteria` that do not tell siblings apart. The details below usually show whether it is the vault or the router.
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt
+      description: The prompt that routed badly.
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Route trace
+      description: Output of `brain-traverse route "<prompt>" -v`
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected note
+      placeholder: Backend/asyncpg_pooling.md
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Criteria of the expected note and its siblings
+      description: The `criteria` frontmatter at the level where the route went wrong. `brain-keeper tree --criteria` prints them.
+      render: text
+  - type: input
+    id: backend
+    attributes:
+      label: Backend and model
+      description: From `brain-traverse health`.
+      placeholder: Jev, jev-1.13.0
+    validations:
+      required: true

@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+**/__pycache__/
+**/*.pyc
+.git/
+.idea/
+.venv/
+.pytest_cache/
+tests/
+pytest.ini
+requirements-test.txt
+README.md

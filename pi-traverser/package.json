@@ -1,0 +1,40 @@
+{
+  "name": "brain-traverse-pi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Pi extension half of brain-traverse: routes each prompt through the vault and injects the matching reference note. Installed via the repository root's pi manifest.",
+  "author": "DukeR-git",
+  "license": "MIT",
+  "homepage": "https://github.com/DukeR-git/duker-brain/tree/main/pi-traverser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DukeR-git/duker-brain.git",
+    "directory": "pi-traverser"
+  },
+  "bugs": {
+    "url": "https://github.com/DukeR-git/duker-brain/issues"
+  },
+  "type": "module",
+  "main": "index.ts",
+  "bin": {
+    "brain-traverse": "./bin/brain-traverse.mjs"
+  },
+  "scripts": {
+    "route": "node bin/brain-traverse.mjs route",
+    "lint:vault": "node bin/brain-traverse.mjs lint",
+    "health": "node bin/brain-traverse.mjs health",
+    "bench": "node bin/brain-traverse.mjs bench",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0"
+  }
+}

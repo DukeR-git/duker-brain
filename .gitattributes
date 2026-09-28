@@ -1,0 +1,6 @@
+# Normalise line endings in the repository to LF.
+* text=auto eol=lf
+
+# Shell scripts and container files run on Linux; CRLF breaks them.
+*.sh text eol=lf
+Dockerfile text eol=lf

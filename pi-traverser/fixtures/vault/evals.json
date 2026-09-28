@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "defaults": {
+    "minConfidence": 0.4
+  },
+  "evals": [
+    {
+      "id": "asyncpg-pool",
+      "prompt": "How do I configure connection pooling for asyncpg in FastAPI?",
+      "expected": "asyncpg_pooling",
+      "tags": ["backend", "database"]
+    },
+    {
+      "id": "celery-workers",
+      "prompt": "How to handle background task retries with Celery in backend?",
+      "expected": "celery_jobs",
+      "tags": ["backend", "queues"]
+    },
+    {
+      "id": "react-state",
+      "prompt": "How do I manage frontend shared state between React components?",
+      "expected": "react_state",
+      "tags": ["frontend"]
+    },
+    {
+      "id": "docker-build",
+      "prompt": "How do I optimize Docker container builds for infrastructure deployment?",
+      "expected": "docker_deploy",
+      "tags": ["infra"]
+    }
+  ]
+}

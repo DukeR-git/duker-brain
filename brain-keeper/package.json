@@ -1,0 +1,41 @@
+{
+  "name": "brain-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP server and CLI for adding to, maintaining and improving the brain-tree knowledge vault. Works with Pi, Claude Code, Codex and any other MCP client.",
+  "author": "DukeR-git",
+  "license": "MIT",
+  "homepage": "https://github.com/DukeR-git/duker-brain/tree/main/brain-keeper#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DukeR-git/duker-brain.git",
+    "directory": "brain-keeper"
+  },
+  "bugs": {
+    "url": "https://github.com/DukeR-git/duker-brain/issues"
+  },
+  "type": "module",
+  "main": "src/server.ts",
+  "bin": {
+    "brain-keeper": "./bin/brain-keeper.mjs"
+  },
+  "scripts": {
+    "serve": "node bin/brain-keeper.mjs serve",
+    "doctor": "node bin/brain-keeper.mjs doctor",
+    "tree": "node bin/brain-keeper.mjs tree",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "tsx": "^4.19.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0"
+  }
+}

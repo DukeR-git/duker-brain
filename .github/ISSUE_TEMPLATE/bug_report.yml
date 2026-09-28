@@ -1,0 +1,56 @@
+name: Bug report
+description: Something is broken, crashes or behaves differently from the docs.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If the router picked the wrong note but nothing crashed, use the **Routing report** template instead.
+        Never paste an API key. `brain-traverse config` only prints whether one is set, but check anything else you paste.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Router (Pi extension / brain-traverse CLI)
+        - Keeper (brain_* tools / MCP server / brain-keeper CLI)
+        - brain-core
+        - host-laya
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. /brain-init ~/brain --example
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or logs
+      description: Error messages, stack traces, or `-v` output.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Paste the output of `brain-traverse config` and `brain-traverse health`, and say which harness you used.
+      placeholder: |
+        OS:
+        Node.js version:
+        Harness (Pi / Claude Code / Codex / other) and version:
+        Decisions backend (Jev / Laya):
+      render: text
+    validations:
+      required: true
