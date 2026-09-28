@@ -25,7 +25,7 @@ jobs:
         # Windows is in the matrix on purpose: path handling (drive letters,
         # backslashes, rename semantics) is where the two platforms differ.
         os: [ubuntu-latest, windows-latest]
-        node: [20, 22]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -51,7 +51,7 @@
     "traverse": "node pi-traverser/bin/brain-traverse.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

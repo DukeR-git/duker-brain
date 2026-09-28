@@ -12,7 +12,7 @@ requests are all welcome.
 
 ## Setup
 
-You need Node.js 20 or newer. Python 3.12 is only needed for `host-laya`.
+You need Node.js 22 or newer. Python 3.12 is only needed for `host-laya`.
 
 ```bash
 git clone https://github.com/DukeR-git/duker-brain
@@ -23,7 +23,7 @@ npm install
 ## Checks
 
 Run these before opening a pull request. CI runs the same checks on Linux and
-Windows with Node 20 and 22.
+Windows with Node 22 and 24.
 
 ```bash
 npm run typecheck
