@@ -160,7 +160,7 @@ export const DEFAULTS: Omit<BrainConfig, "sources" | "warnings"> = {
 	maxHops: 4,
 	minConfidence: 0.4,
 	gateEnabled: true,
-	gateThreshold: 0.5,
+	gateThreshold: 0.2,
 	fallbackDocument: "auto",
 	maxDocumentChars: 12000,
 	maxPromptChars: 1500,

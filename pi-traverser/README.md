@@ -243,7 +243,7 @@ key is ignored with a warning — and `/brain config` shows the warnings.
 | `maxHops` | `BRAIN_MAX_HOPS` | `4` | Hard ceiling. The doctor flags folders deeper than this. |
 | `minConfidence` | `BRAIN_MIN_CONFIDENCE` | `0.4` | Below this, fall back. Read from `probabilities` when a backend omits `confidence`. |
 | `gateEnabled` | `BRAIN_GATE_ENABLED` | `true` | The "needs a manual?" pre-check. |
-| `gateThreshold` | `BRAIN_GATE_THRESHOLD` | `0.5` | Noul probability to proceed. |
+| `gateThreshold` | `BRAIN_GATE_THRESHOLD` | `0.2` | Noul probability to proceed. |
 | `fallbackDocument` | `BRAIN_FALLBACK_DOC` | `auto` | The nearest note marked `fallback: true`; or a vault-relative path; `""` disables. |
 | `maxDocumentChars` | `BRAIN_MAX_DOC_CHARS` | `12000` | Injected-document cap. |
 | `maxPromptChars` | `BRAIN_MAX_PROMPT_CHARS` | `1500` | Prompt slice sent as decision state. |
