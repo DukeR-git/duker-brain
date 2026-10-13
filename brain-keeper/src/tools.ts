@@ -11,8 +11,8 @@ import { join, resolve } from "node:path";
 import * as z from "zod";
 
 import { exportVault, loadEvalSuite, renderEvalReport, runEvalSuite } from "../../brain-core/src/index.js";
+import { JEV_URL } from "../../brain-core/src/env.js";
 import { parseNote } from "../../brain-core/src/frontmatter.js";
-import { isLocalUrl } from "../../brain-core/src/env.js";
 import { normaliseVaultPath, resolveInVault } from "../../brain-core/src/paths.js";
 import { findNode, scanVault } from "../../brain-core/src/vault.js";
 import { requireVault, type KeeperConfig } from "./config.js";
@@ -229,11 +229,12 @@ const brainCheckRouting = defineTool({
 		const allFailed = checks.every((check) => check.result.status === "error");
 		if (!allFailed) return ok(renderRoutingChecks(checks));
 
-		const fix = isLocalUrl(config.decisionsUrl)
-			? "Check that the Laya host is running (brain-traverse health), or point BRAIN_DECISIONS_URL elsewhere."
-			: config.apiKey
-				? "Check the API key and BRAIN_DECISIONS_URL (brain-traverse health says which is wrong)."
-				: "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment, or point BRAIN_DECISIONS_URL at a Laya host.";
+		const fix =
+			config.decisionsUrl.replace(/\/+$/, "") !== JEV_URL
+				? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key."
+				: config.apiKey
+					? "Check the API key (brain-traverse health says what is wrong)."
+					: "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
 		return {
 			text: `${renderRoutingChecks(checks)}\n\nEvery check failed to reach the decisions service at ${config.decisionsUrl}. ${fix}`,
 			isError: true,

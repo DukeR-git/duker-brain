@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 
-import { SOURCES_FILE, STARTERS_DIR, addBrain, listStarters, parseSource, readSources, updateBrains } from "../src/brains.js";
+import { SOURCES_FILE, STARTERS_DIR, addBrain, fetchSource, listStarters, parseSource, readSources, updateBrains } from "../src/brains.js";
 import { initVault } from "../src/init.js";
 import { compileVault, flatten, scanVault } from "../../brain-core/src/vault.js";
 import { isolatedEnv, note, scratch, tempDir } from "../../brain-core/test/helpers.js";
@@ -340,6 +340,23 @@ describe("updating a brain", () => {
 
 		assert.match(result.updates.find((update) => update.folder === "go-brain")!.error ?? "", /could not fetch/);
 		assert.equal(result.updates.find((update) => update.folder === "python-backend")!.error, undefined);
+	});
+
+	it("keeps a brain another process added while it was cloning", () => {
+		const root = vault();
+		addBrain({ vaultRoot: root, source: repo(GO_BRAIN).url });
+		const other = repo(GO_BRAIN, "rust-brain");
+
+		const result = updateBrains({
+			vaultRoot: root,
+			fetch: (source) => {
+				addBrain({ vaultRoot: root, source: other.url }); // lands mid-clone; the lock is free
+				return fetchSource(source);
+			},
+		});
+
+		assert.equal(result.updates[0].error, undefined);
+		assert.deepEqual(Object.keys(readSources(root).brains).sort(), ["go-brain", "rust-brain"]);
 	});
 
 	it("refuses a folder that was not added as a brain", () => {

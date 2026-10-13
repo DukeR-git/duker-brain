@@ -9,7 +9,7 @@
   "homepage": "https://github.com/DukeR-git/duker-brain#readme",
   "repository": "https://github.com/DukeR-git/duker-brain",
   "license": "MIT",
-  "keywords": ["context-routing", "obsidian", "knowledge-base", "mcp", "jev", "laya"],
+  "keywords": ["context-routing", "obsidian", "knowledge-base", "mcp", "jev"],
   "userConfig": {
     "vault_root": {
       "type": "directory",
@@ -20,14 +20,14 @@
     "api_key": {
       "type": "string",
       "title": "Decisions API key",
-      "description": "Your TypeSafe key (console.typesafe.ai/keys), or the LAYA_API_KEY of a self-hosted Laya. Leave empty to use TYPESAFE_API_KEY from your environment.",
+      "description": "Your TypeSafe key (console.typesafe.ai/keys), or your self-hosted service's key if it has one. Leave empty to use TYPESAFE_API_KEY from your environment.",
       "sensitive": true,
       "default": ""
     },
     "decisions_url": {
       "type": "string",
       "title": "Decisions API URL",
-      "description": "Leave empty for the hosted TypeSafe Jev API. For a self-hosted Laya, e.g. http://my-server:8081.",
+      "description": "Leave empty for the hosted TypeSafe Jev API. Or a self-hosted service with the same API, e.g. http://my-server:8081.",
       "default": ""
     }
   },

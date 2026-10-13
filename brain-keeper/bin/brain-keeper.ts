@@ -358,8 +358,8 @@ Codex
 Any other MCP client (stdio)
   { "command": "node", "args": [${JSON.stringify(launcher)}, "serve"], "env": { "TYPESAFE_API_KEY": "<your key>" } }
 
-Using a self-hosted Laya host instead of Jev? Drop the key (or pass its
-LAYA_API_KEY as BRAIN_DECISIONS_API_KEY) and set "decisionsUrl" in the config file.
+Using a self-hosted decisions service with the same API as Jev? Set "decisionsUrl"
+in the config file (or BRAIN_DECISIONS_URL), and pass a key only if it asks for one.
 
 Pi needs none of this: \`pi install\` registers the tools and commands natively.
 `.trim();

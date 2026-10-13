@@ -6,6 +6,33 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **host-laya.** The repository is now the Claude Code plugin and Pi package
+  only. A self-hosted decision model still works: point the *Decisions API URL*
+  (or `decisionsUrl`) at any service with the same API as TypeSafe Jev, and no
+  API key is needed unless that service checks one. Gone with host-laya: the
+  Laya-specific `/healthz` probe (health now uses `GET /v1/models`),
+  `minActProbability`, and the shorter timeouts for local-network URLs (every
+  URL now gets 2 s per request and 3 s per route). The internal architecture
+  plan is gone too.
+- Pi's own 2-minute route cache. Repeated prompts are served by the route
+  cache, which notices vault edits.
+
+### Fixed
+
+- Composite routing no longer injects a runner-up note on its own when the top
+  choice found nothing; it falls back instead, and does not ask the same
+  question twice.
+- The route cache notices edits to a note's text (in Obsidian too), keeps
+  entries made under different settings apart, and no longer stores prompts
+  in clear in the vault.
+- `brain-keeper update` clones before taking the vault lock, and `add` and
+  `update` read `.brain-sources.json` under the lock, so a brain added
+  meanwhile is no longer dropped from the record.
+- The Claude Code hook and the Pi extension share one list of short replies
+  that need no guide.
+
 ## [1.2.0] - 2026-09-28
 
 ### Added

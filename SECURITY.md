@@ -24,14 +24,12 @@ advisory is published and you are credited, unless you would rather not be.
 
 These are in scope:
 
-- **API key handling**: `apiKey`, `TYPESAFE_API_KEY`, `BRAIN_DECISIONS_API_KEY`
-  or `LAYA_API_KEY` leaking into logs, the route log, error messages, injected
+- **API key handling**: `apiKey`, `TYPESAFE_API_KEY` or `BRAIN_DECISIONS_API_KEY`
+  leaking into logs, the route log, error messages, injected
   context or tool output.
 - **Vault writes**: any keeper tool or CLI command that can write, move or
   delete files outside the configured `vaultRoot`, for example through path
   traversal in a note ID or path.
-- **host-laya**: authentication bypass when `LAYA_API_KEY` is set, or anything
-  that lets a client do more than request a decision.
 - **Shared brains**: a brain added with `brain-keeper add` that gets anything
   into your vault other than its own notes, for example files from outside
   its folder through links or path tricks, or anything that executes.
@@ -40,8 +38,6 @@ These are in scope:
 
 These are out of scope:
 
-- host-laya started without `LAYA_API_KEY` and bound to a network interface.
-  That is documented as unauthenticated.
 - The content of your own vault, including notes from a shared brain you
   added. Notes are injected into the agent's context by design, so only put
   there, and only add brains from sources, you trust. Report a malicious
@@ -52,6 +48,4 @@ These are out of scope:
 
 - Keep API keys in environment variables, not in `brain-traverse.config.json`.
   The config file is git-ignored, but a copy elsewhere may not be.
-- Leave host-laya on `127.0.0.1` (the default) unless other machines need it.
-  If they do, set `LAYA_API_KEY` and restrict the port with a firewall.
 - Keep the vault in git, so that any unwanted keeper write can be reverted.

@@ -1,6 +1,5 @@
 /**
- * The client's two backends: a Laya host (answers /healthz) and the hosted Jev
- * API (no /healthz, bearer key required). The same client must work against both.
+ * The client against the hosted Jev API: health via /v1/models, bearer key required.
  */
 
 import assert from "node:assert/strict";
@@ -33,20 +32,10 @@ function client(options: { apiKey?: string; model?: string; baseUrl?: string } =
 }
 
 describe("health", () => {
-	it("recognises a Laya host by its /healthz", async () => {
-		mock.behaviour = {};
-		const health = await client().health();
-		assert.equal(health.ok, true);
-		assert.equal(health.backend, "laya");
-		assert.equal(health.model, "mock");
-		assert.equal(health.device, "cpu");
-	});
-
-	it("falls back to /v1/models for Jev, and checks the key", async () => {
+	it("checks the key against /v1/models", async () => {
 		mock.behaviour = { jevKey: "sk-test" };
 		const health = await client({ apiKey: "sk-test", model: "jev-1.13.0" }).health();
 		assert.equal(health.ok, true);
-		assert.equal(health.backend, "jev");
 		assert.equal(health.model, "jev-1.13.0");
 		mock.behaviour = {};
 	});
@@ -64,28 +53,6 @@ describe("health", () => {
 		const health = await client({ apiKey: "sk-wrong" }).health();
 		assert.equal(health.ok, false);
 		assert.match(health.error ?? "", /rejected/);
-		mock.behaviour = {};
-	});
-
-	it("tells a Laya host that is still loading from one that failed", async () => {
-		mock.behaviour = { health: "loading" };
-		const loading = await client().health();
-		assert.equal(loading.ok, false);
-		assert.equal(loading.loading, true, "worth probing again soon");
-
-		mock.behaviour = { health: "failed" };
-		const failed = await client().health();
-		assert.equal(failed.ok, false);
-		assert.equal(failed.loading, undefined);
-		assert.match(failed.error ?? "", /failed to load its checkpoint: no XPU device/);
-		mock.behaviour = {};
-	});
-
-	it("checks the key of a Laya host started with LAYA_API_KEY", async () => {
-		mock.behaviour = { layaKey: "laya-secret" };
-		assert.match((await client().health()).error ?? "", /requires an API key/);
-		assert.match((await client({ apiKey: "wrong" }).health()).error ?? "", /rejected the API key/);
-		assert.equal((await client({ apiKey: "laya-secret" }).health()).ok, true);
 		mock.behaviour = {};
 	});
 

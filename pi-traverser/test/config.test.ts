@@ -15,12 +15,8 @@ describe("loadConfig", () => {
 		assert.equal(config.fallbackDocument, "auto");
 	});
 
-	it("derives a tight timeout for a local host and a loose one for a remote", () => {
+	it("defaults to a 2s timeout", () => {
 		assert.equal(loadConfig({ skipFile: true, env: {} }).timeoutMs, 2000);
-		assert.equal(
-			loadConfig({ skipFile: true, env: { BRAIN_DECISIONS_URL: "http://localhost:8081" } }).timeoutMs,
-			500,
-		);
 	});
 
 	it("takes the API key from TYPESAFE_API_KEY unless BRAIN_DECISIONS_API_KEY is set", () => {

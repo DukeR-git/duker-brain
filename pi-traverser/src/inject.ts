@@ -99,10 +99,7 @@ export function formatReminder(result: TraversalResult, turnsAgo: number): strin
 /** One-line trace for the debug console and the CLI. */
 export function formatTrace(result: TraversalResult): string {
 	const hops = result.hops
-		.map((hop) => {
-			const act = hop.actProbability === undefined ? "" : `, act ${hop.actProbability.toFixed(2)}`;
-			return `${hop.chosen}(${hop.confidence.toFixed(2)}${act}, ${Math.round(hop.latencyMs)}ms)`;
-		})
+		.map((hop) => `${hop.chosen}(${hop.confidence.toFixed(2)}, ${Math.round(hop.latencyMs)}ms)`)
 		.join(" -> ");
 
 	const parts = [`${result.status}${result.cached ? " (cache)" : ""}`];

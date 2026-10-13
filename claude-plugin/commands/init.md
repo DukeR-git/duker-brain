@@ -36,6 +36,8 @@ Report the result in a few lines. Things worth knowing when you do:
   folder set in the plugin's settings takes precedence over it.
 - Routing through the hosted TypeSafe Jev API (the default) needs an API key.
   If none is configured, tell the user to add it in the plugin's settings
-  (`/plugin`, then duker-brain) or to set `TYPESAFE_API_KEY`.
+  (`/plugin`, then duker-brain) or to set `TYPESAFE_API_KEY`. A self-hosted
+  decisions service set as the *Decisions API URL* needs a key only if it asks
+  for one.
 
 Finish by suggesting `/duker-brain:status` to confirm that routing works.

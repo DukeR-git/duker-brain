@@ -12,7 +12,7 @@ requests are all welcome.
 
 ## Setup
 
-You need Node.js 22 or newer. Python 3.12 is only needed for `host-laya`.
+You need Node.js 22 or newer.
 
 ```bash
 git clone https://github.com/DukeR-git/duker-brain
@@ -31,20 +31,11 @@ npm test
 npm run build
 ```
 
-None of the tests need a GPU, a network or an API key: a mock decisions server
-stands in for both Jev and Laya. The opt-in live test runs against a real
-service:
+None of the tests need a network or an API key: a mock decisions server
+stands in for Jev. The opt-in live test runs against the real API:
 
 ```bash
 BRAIN_LIVE_URL=https://api.typesafe.ai TYPESAFE_API_KEY=sk-... npm test
-```
-
-For `host-laya`:
-
-```bash
-cd host-laya
-pip install -r requirements-test.txt
-pytest
 ```
 
 ## How the code is laid out
@@ -89,7 +80,7 @@ includes:
 - the prompt,
 - the output of `brain-traverse route "<prompt>" -v`,
 - the `criteria` of the note you expected and of its siblings,
-- which backend and model you used (`brain-traverse health`).
+- which model you used (`brain-traverse health`).
 
 The bug report template asks for these.
 

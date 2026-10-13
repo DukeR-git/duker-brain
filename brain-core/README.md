@@ -17,9 +17,9 @@ stops working.
 | `manifest.ts` | `_index.json` schema, validation, cached reads, `MAX_CHILDREN` and the criteria thresholds |
 | `vault.ts` | Scanning the tree, `.brainignore`, health checks, and the compiler — which never writes a manifest the traverser would reject |
 | `traverser.ts` | The routing loop and its guardrails: confidence, route budget, the nearest catch-all |
-| `decisions-client.ts` | HTTP client for Jev / Laya, with a health check that tells them apart; never throws |
+| `decisions-client.ts` | HTTP client for the Jev decisions API, with a key-checking health probe; never throws |
 | `paths.ts` | Vault-relative paths, and refusing anything that escapes the root (other Windows drives included) |
-| `env.ts` | Defaults (Jev URL, path, model), config-file discovery, and which URLs count as local |
+| `env.ts` | Defaults (Jev URL, path, model, timeouts) and config-file discovery |
 | `config.ts` | The one validated config loader both packages use, with per-setting sources |
 | `fsutil.ts` | Atomic writes and the vault lock |
 | `routelog.ts` | The JSONL routing log and the report `brain-traverse stats` prints |
@@ -45,16 +45,14 @@ The one constraint: **the three folders must stay side by side** inside
 
 ```bash
 npm install     # at the repository root
-npm test        # 146 tests
+npm test        # 169 tests
 npm run typecheck
 ```
 
-`test/mock-decisions.ts` is a fake decisions API. By default it behaves like
-host-laya; with `jevKey` set it behaves like hosted Jev (no `/healthz`, and a
-bearer key is required). It also scripts a loading or failed host, a keyed
-host, `Retry-After`, and non-JSON bodies, and it answers 404 on any path a real
-backend does not serve. Every package's suite uses it, so nothing needs a GPU,
-a network or an API key. `test/helpers.ts` makes temp vaults that are deleted
+`test/mock-decisions.ts` is a fake of the Jev decisions API; with `jevKey` set
+it requires that bearer key. It also scripts failures, `Retry-After` and
+non-JSON bodies, and it answers 404 on any path Jev does not serve. Every
+package's suite uses it, so nothing needs a network or an API key. `test/helpers.ts` makes temp vaults that are deleted
 when the test process exits.
 
 `test/live.test.ts` is the one test against a real service, and it only runs

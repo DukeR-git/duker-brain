@@ -1,10 +1,9 @@
 /**
- * A fake decisions API that speaks the same shape as host-laya - or, with
- * `jevKey` set, behaves like the hosted Jev API: no /healthz, and every call
- * needs the bearer key.
+ * A fake of the hosted Jev decisions API. With `jevKey` set, every call needs
+ * the bearer key.
  *
  * Tests drive it with a scripted routing table rather than a real model, so the
- * traversal logic is tested deterministically and without a GPU. The one test
+ * traversal logic is tested deterministically and offline. The one test
  * that talks to the real service is opt-in via BRAIN_LIVE_URL (live.test.ts).
  */
 
@@ -24,8 +23,6 @@ export interface MockBehaviour {
 	omitConfidence?: boolean;
 	/** Custom probability distribution to report. */
 	probabilities?: Record<string, number> | ((options: string[], state: string, hop: number) => Record<string, number>);
-	/** Laya's act probability for the choice answer. */
-	actProbability?: number;
 	/** Noul probability for the gate question. */
 	gate?: number;
 	/** Fail every request with this HTTP status. */
@@ -42,12 +39,8 @@ export interface MockBehaviour {
 	omitChoice?: boolean;
 	/** Service warnings to attach to every answer. */
 	warnings?: string[];
-	/** Act like hosted Jev: 404 on /healthz, and 403 unless `Authorization: Bearer <jevKey>`. */
+	/** Answer 403 unless `Authorization: Bearer <jevKey>`. */
 	jevKey?: string;
-	/** Act like a Laya host started with LAYA_API_KEY: /healthz open, /v1/* needs the key (401). */
-	layaKey?: string;
-	/** What a Laya /healthz reports: ready (default), still loading, or failed to load. */
-	health?: "ready" | "loading" | "failed";
 }
 
 export interface MockServer {
@@ -89,25 +82,10 @@ export async function startMockDecisions(behaviour: MockBehaviour = {}): Promise
 		};
 
 		const jevKey = current.jevKey;
-		const layaKey = current.layaKey;
 		const bearer = req.headers.authorization;
 		const jevAuthorised = !jevKey || bearer === `Bearer ${jevKey}`;
-		const layaAuthorised = !layaKey || bearer === `Bearer ${layaKey}`;
-
-		if (req.url === "/healthz") {
-			if (jevKey) return json(404, { detail: "Not Found" });
-			const health = current.health ?? "ready";
-			return json(200, {
-				ready: health === "ready",
-				status: health === "ready" ? "ok" : health,
-				...(health === "failed" ? { error: "no XPU device" } : {}),
-				served_model_name: "mock",
-				device_active: "cpu",
-			});
-		}
 
 		if (req.url === "/v1/models") {
-			if (!layaAuthorised) return json(401, { error: { type: "authentication_error", message: "bad key" } });
 			return jevAuthorised
 				? json(200, { data: [{ id: "jev-latest" }] })
 				: json(403, { detail: { error_type: "authentication_error" } });
@@ -116,7 +94,6 @@ export async function startMockDecisions(behaviour: MockBehaviour = {}): Promise
 		if (!DECISION_PATHS.has(req.url ?? "")) return json(404, { detail: "Not Found" });
 
 		if (!jevAuthorised) return json(403, { detail: { error_type: "authentication_error" } });
-		if (!layaAuthorised) return json(401, { error: { type: "authentication_error", message: "bad key" } });
 
 		state.hits++;
 		state.paths.push(req.url ?? "");
@@ -191,7 +168,6 @@ export async function startMockDecisions(behaviour: MockBehaviour = {}): Promise
 						choice,
 						...(behaviour.omitConfidence ? {} : { confidence }),
 						probabilities,
-						...(behaviour.actProbability !== undefined ? { action: { act_probability: behaviour.actProbability } } : {}),
 					};
 				}
 

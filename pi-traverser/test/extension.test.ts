@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
 
 import brainTraverse, { isTrivialFollowUp } from "../src/extension.js";
-import { FIXTURE, isolatedEnv, tempDir } from "../../brain-core/test/helpers.js";
+import { FIXTURE, fixtureCopy, isolatedEnv, tempDir } from "../../brain-core/test/helpers.js";
 import { readRouteLog } from "../../brain-core/src/routelog.js";
 import { startMockDecisions, type MockServer } from "../../brain-core/test/mock-decisions.js";
 
@@ -158,15 +158,15 @@ describe("the Pi extension", () => {
 	});
 
 	it("resumes on its own once the service comes back", async () => {
-		mock.behaviour = { health: "loading" };
+		mock.behaviour = { jevKey: "not-ours" };
 		const pi = harness();
 		await pi.start();
-		assert.equal(await pi.prompt(POOLING), undefined, "still loading: nothing routed");
+		assert.equal(await pi.prompt(POOLING), undefined, "key rejected: nothing routed");
 
-		// The host finishes loading; after the cool-down the next prompt kicks off
+		// The service accepts us again; after the cool-down the next prompt kicks off
 		// a background probe, and the one after that routes.
 		mock.behaviour = {};
-		pi.clock.now += 6_000;
+		pi.clock.now += 16_000;
 		assert.equal(await pi.prompt(POOLING), undefined, "the probe does not block this prompt");
 		await settle();
 		const result = await pi.prompt(POOLING);
@@ -352,7 +352,8 @@ describe("session memory", () => {
 
 	it("reuses the route for an identical prompt instead of asking again", async () => {
 		mock.behaviour = {};
-		const pi = harness();
+		// The traverser's route cache does this; it writes into the vault, so use a copy.
+		const pi = harness({ BRAIN_VAULT_ROOT: fixtureCopy(), BRAIN_USE_CACHE: "true" });
 		await pi.start();
 		await pi.prompt(POOLING);
 		const before = mock.hits;

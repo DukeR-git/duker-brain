@@ -9,8 +9,8 @@
  *     reason, because a routing miss must never take down an agent turn.
  *   - scan the filesystem. If a directory has no manifest, traversal stops.
  *
- * The gate question rides along with the first hop's choice question. Laya
- * answers every question in a request in one forward pass, so asking "does this
+ * The gate question rides along with the first hop's choice question. The
+ * decisions API answers every question in a request together, so asking "does this
  * prompt even need a reference guide?" costs a few milliseconds rather than a
  * whole extra round trip.
  */
@@ -25,6 +25,7 @@ import { ManifestError, ManifestStore, type LoadedManifest } from "./manifest.js
 import { isInsideVault, relativeToVault } from "./paths.js";
 import { RouteCache, defaultRouteCache } from "./cache.js";
 import type {
+	ChoiceAnswer,
 	Hop,
 	ManifestEntry,
 	Question,
@@ -51,11 +52,9 @@ export interface TraverserOptions {
 	watchManifests: boolean;
 	/** Ceiling on the whole route, every hop and retry included. Unlimited when absent or 0. */
 	routeBudgetMs?: number;
-	/** Laya only: an act probability below this counts as an unsure hop. 0 or absent disables it. */
-	minActProbability?: number;
 	/** Defaults to true when absent. */
 	enabled?: boolean;
-	/** Use the local route cache. Defaults to true when absent. */
+	/** Use the local route cache. Off when absent: the routing check relies on that. */
 	useCache?: boolean;
 	/** Support multi-document composite routing for cross-cutting prompts. Defaults to true. */
 	compositeEnabled?: boolean;
@@ -78,11 +77,22 @@ const GATE_INSTRUCTIONS =
 
 type Finish = (status: TraversalStatus, reason: string, extra?: Partial<TraversalResult>) => TraversalResult;
 
+function routeQuestion(manifest: LoadedManifest): Question {
+	const criteria: Record<string, string> = {};
+	for (const entry of manifest.entries) criteria[entry.id] = entry.criteria;
+	return { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria };
+}
+
+/** A hop's name in the trail: the file for a leaf, the id for a folder. */
+function label(entry: ManifestEntry): string {
+	return entry.type === "leaf" ? basename(entry.targetPath) : entry.id;
+}
+
 /** Words that carry no topic: a prompt made only of these cannot need a reference guide. */
 const ACKNOWLEDGEMENT_WORDS = new Set(
 	(
 		"y yes yeah yep yup no nope ok okay k kk sure thanks thank you thx ty cheers continue go on ahead proceed " +
-		"carry keep going next done great nice cool perfect sounds looks good lgtm agreed do it ship please mate"
+		"carry keep going next done great nice cool perfect sounds looks good lgtm agree agreed do it ship please mate"
 	).split(" "),
 );
 
@@ -189,9 +199,26 @@ export function allocateUnifiedContextBudget(
 	});
 }
 
+/** Where one walk down the tree ended. */
+interface BranchResult {
+	document: TraversalDocument | null;
+	hops: Hop[];
+	segments: string[];
+	/** Every manifest walked through, root first; the fallback search runs back up it. */
+	visited: LoadedManifest[];
+	minConfidence: number;
+	status: TraversalStatus;
+	reason: string;
+	warnings: string[];
+	/** The decisions service failed: no evidence any guide is right, so no fallback either. */
+	serviceDown?: boolean;
+}
+
 export class BrainTraverser {
 	private readonly manifests: ManifestStore;
 	private readonly cache: RouteCache;
+	/** Cached routes are only valid for the settings that produced them; Pi and the Claude Code hook differ. */
+	private readonly cacheScope: string;
 
 	constructor(
 		private readonly config: TraverserOptions,
@@ -201,6 +228,22 @@ export class BrainTraverser {
 	) {
 		this.manifests = new ManifestStore(config.vaultRoot, config.watchManifests);
 		this.cache = cache ?? defaultRouteCache;
+		const c = config;
+		this.cacheScope = JSON.stringify([
+			client.endpoint,
+			client.model,
+			c.maxHops,
+			c.minConfidence,
+			c.gateEnabled,
+			c.gateThreshold,
+			c.fallbackDocument,
+			c.maxDocumentChars,
+			c.maxPromptChars,
+			c.compositeEnabled,
+			c.compositeThreshold,
+			c.compositeMarginRatio,
+			c.maxCompositeDocuments,
+		]);
 	}
 
 	/** Drop cached manifests and route cache; used by the `/brain reload` command. */
@@ -215,8 +258,6 @@ export class BrainTraverser {
 		const hops: Hop[] = [];
 		const segments = ["Root"];
 		const warnings: string[] = [];
-		/** Every manifest walked through, root first; the fallback search runs back up it. */
-		const visited: LoadedManifest[] = [];
 
 		const finish: Finish = (status, reason, extra = {}) => {
 			const docs = extra.documents ?? (extra.document ? [extra.document] : undefined);
@@ -237,7 +278,7 @@ export class BrainTraverser {
 				this.config.useCache === true &&
 				(status === "leaf" || status === "composite" || status === "fallback" || status === "skipped")
 			) {
-				this.cache.set(prompt, this.config.vaultRoot, res);
+				this.cache.set(prompt, this.config.vaultRoot, res, this.cacheScope);
 			}
 			return res;
 		};
@@ -248,7 +289,7 @@ export class BrainTraverser {
 		if (!this.config.vaultRoot) return finish("no-index", "vaultRoot is not configured");
 
 		if (this.config.useCache === true) {
-			const cached = this.cache.get(prompt, this.config.vaultRoot);
+			const cached = this.cache.get(prompt, this.config.vaultRoot, this.cacheScope);
 			if (cached) {
 				return cached;
 			}
@@ -261,240 +302,130 @@ export class BrainTraverser {
 			return finish("skipped", "a short acknowledgement; no reference needed");
 		}
 
-		let dir = resolve(this.config.vaultRoot);
-		let gate: TraversalResult["gate"];
-
-		for (let hop = 0; hop < this.config.maxHops; hop++) {
-			let manifest: LoadedManifest | null;
-			try {
-				manifest = this.manifests.load(dir);
-			} catch (error) {
-				if (error instanceof ManifestError) {
-					return this.withFallback(finish, visited, "error", `malformed manifest: ${error.message}`, gate);
-				}
-				throw error;
+		const rootDir = resolve(this.config.vaultRoot);
+		let loaded: LoadedManifest | null;
+		try {
+			loaded = this.manifests.load(rootDir);
+		} catch (error) {
+			if (error instanceof ManifestError) {
+				return this.withFallback(finish, [], "error", `malformed manifest: ${error.message}`, undefined);
 			}
+			throw error;
+		}
+		if (!loaded) return finish("no-index", `no _index.json at the vault root (${this.manifests.relativeToVault(rootDir)})`);
+		const root = loaded;
+		const visited = [root];
 
-			if (!manifest) {
-				const where = this.manifests.relativeToVault(dir);
-				if (hop === 0) {
-					return finish("no-index", `no _index.json at the vault root (${where})`, { gate });
-				}
-				// A branch pointing at a directory with no manifest is a vault bug,
-				// not a reason to abandon the turn.
-				return this.withFallback(finish, visited, "no-index", `no _index.json in '${where}'`, gate);
-			}
-			visited.push(manifest);
-
-			const criteria: Record<string, string> = {};
-			for (const entry of manifest.entries) criteria[entry.id] = entry.criteria;
-
-			const questions: Record<string, Question> = {
-				[ROUTE_QUESTION]: { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria },
-			};
-			if (hop === 0 && this.config.gateEnabled) {
-				questions[GATE_QUESTION] = { type: "noul", instructions: GATE_INSTRUCTIONS };
-			}
-
-			const outcome = await this.client.ask(state, questions, { deadline });
-			if (!outcome.ok) {
-				// Deliberately no fallback document here: if the decisions service is
-				// down we have no evidence any guide is the right one.
-				return finish("error", `decisions API failed: ${outcome.error}`, { gate });
-			}
-			if (outcome.warnings) warnings.push(...outcome.warnings);
-
-			if (hop === 0 && this.config.gateEnabled) {
-				const answer = outcome.answers[GATE_QUESTION];
-				if (answer && answer.type === "noul" && typeof answer.noul === "number") {
-					gate = { needed: answer.noul >= this.config.gateThreshold, probability: answer.noul };
-					if (!gate.needed) {
-						return finish(
-							"skipped",
-							`gate says no reference needed (p=${answer.noul.toFixed(3)} < ${this.config.gateThreshold})`,
-							{ gate },
-						);
-					}
-				} else {
-					this.logger.debug("gate question returned no noul answer; continuing without it");
-				}
-			}
-
-			const answer = outcome.answers[ROUTE_QUESTION];
-			if (!answer || answer.type !== "choice") {
-				return this.withFallback(finish, visited, "error", "decisions API returned no choice answer", gate);
-			}
-
-			const entry = manifest.entries.find((candidate) => candidate.id === answer.choice);
-			if (!entry) {
-				// Guard against a label that is not on the menu; without this the
-				// traverser would try to descend into a directory that does not exist.
-				return this.withFallback(
-					finish,
-					visited,
-					"error",
-					`model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(dir)}/_index.json`,
-					gate,
-				);
-			}
-
-			const confidence = choiceConfidence(answer);
-
-			// Composite Routing: check if alternative candidates meet the composite threshold
-			if (
-				hop === 0 &&
-				this.config.compositeEnabled !== false &&
-				confidence >= this.config.minConfidence &&
-				answer.probabilities
-			) {
-				const threshold = this.config.compositeThreshold ?? 0.25;
-				const marginRatio = this.config.compositeMarginRatio ?? 0.65;
-				const maxDocs = this.config.maxCompositeDocuments ?? 2;
-				const winnerProb = answer.probabilities[entry.id] ?? confidence;
-
-				const otherCandidates = manifest.entries.filter((cand) => {
-					if (cand.id === entry.id) return false;
-					const p = answer.probabilities?.[cand.id];
-					if (typeof p !== "number" || !Number.isFinite(p)) return false;
-					return p >= threshold && p >= winnerProb * marginRatio;
-				});
-
-				if (otherCandidates.length > 0 && maxDocs > 1) {
-					otherCandidates.sort(
-						(a, b) => (answer.probabilities?.[b.id] ?? 0) - (answer.probabilities?.[a.id] ?? 0),
-					);
-					const selectedCandidates = [entry, ...otherCandidates.slice(0, maxDocs - 1)];
-
-					const branchPromises = selectedCandidates.map((cand) => {
-						const candConf =
-							cand.id === entry.id
-								? confidence
-								: choiceConfidence({ choice: cand.id, probabilities: answer.probabilities });
-						return this.traverseBranch(
-							manifest!,
-							dir,
-							cand,
-							candConf,
-							answer.probabilities,
-							answer.action?.act_probability,
-							state,
-							deadline,
-							visited,
-						);
-					});
-
-					const branchResults = await Promise.all(branchPromises);
-
-					const uniqueDocs: TraversalDocument[] = [];
-					const seenPaths = new Set<string>();
-					for (const b of branchResults) {
-						if (b.document && !seenPaths.has(b.document.path)) {
-							seenPaths.add(b.document.path);
-							uniqueDocs.push({
-								...b.document,
-								confidence: b.minConfidence,
-								trail: b.segments.join(" -> "),
-							});
-						}
-						hops.push(...b.hops);
-						if (b.warnings.length) warnings.push(...b.warnings);
-					}
-
-					if (uniqueDocs.length > 1) {
-						const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
-						const compositeTrail = `Composite [${budgeted.map((d) => d.trail ?? d.path).join(", ")}]`;
-						const compositeMinConf = Math.min(...budgeted.map((d) => d.confidence ?? 1));
-						return finish(
-							"composite",
-							`composite route resolved ${budgeted.length} complementary guides`,
-							{
-								document: budgeted[0],
-								documents: budgeted,
-								composite: true,
-								trail: compositeTrail,
-								minConfidence: compositeMinConf,
-								gate,
-							},
-						);
-					} else if (uniqueDocs.length === 1) {
-						const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
-						return finish("leaf", branchResults[0].reason, {
-							document: budgeted[0],
-							documents: budgeted,
-							trail: branchResults[0].segments.join(" -> "),
-							minConfidence: branchResults[0].minConfidence,
-							gate,
-						});
-					}
-					// If no branches reached a leaf, fall through to withFallback
-				}
-			}
-
-			const actProbability = answer.action?.act_probability;
-			hops.push({
-				from: this.manifests.relativeToVault(dir),
-				chosen: entry.id,
-				type: entry.type,
-				confidence,
-				latencyMs: outcome.serverMs ?? outcome.latencyMs,
-				probabilities: answer.probabilities,
-				optionCount: manifest.entries.length,
-				...(typeof actProbability === "number" ? { actProbability } : {}),
-			});
-			segments.push(entry.type === "leaf" ? basename(entry.targetPath) : entry.id);
-
-			if (confidence < this.config.minConfidence) {
-				return this.withFallback(
-					finish,
-					visited,
-					"low-confidence",
-					`confidence ${confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${hop + 1}`,
-					gate,
-				);
-			}
-
-			const minAct = this.config.minActProbability ?? 0;
-			if (minAct > 0 && typeof actProbability === "number" && actProbability < minAct) {
-				return this.withFallback(
-					finish,
-					visited,
-					"low-confidence",
-					`act probability ${actProbability.toFixed(3)} below threshold ${minAct} at hop ${hop + 1}`,
-					gate,
-				);
-			}
-
-			let target: string;
-			try {
-				target = this.manifests.resolveTarget(manifest, entry);
-			} catch (error) {
-				return this.withFallback(finish, visited, "error", (error as Error).message, gate);
-			}
-
-			if (entry.type === "leaf") {
-				const document = this.readDocument(target, entry);
-				if (!document) {
-					return this.withFallback(
-						finish,
-						visited,
-						"error",
-						`leaf '${entry.id}' points at a missing file: ${entry.targetPath}`,
-						gate,
-					);
-				}
-				return finish("leaf", `routed in ${hops.length} hop(s)`, { document, gate });
-			}
-
-			dir = target;
+		const questions: Record<string, Question> = { [ROUTE_QUESTION]: routeQuestion(root) };
+		if (this.config.gateEnabled) {
+			questions[GATE_QUESTION] = { type: "noul", instructions: GATE_INSTRUCTIONS };
 		}
 
-		return this.withFallback(
-			finish,
-			visited,
-			"max-hops",
-			`hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`,
+		const outcome = await this.client.ask(state, questions, { deadline });
+		if (!outcome.ok) {
+			// Deliberately no fallback document here: if the decisions service is
+			// down we have no evidence any guide is the right one.
+			return finish("error", `decisions API failed: ${outcome.error}`);
+		}
+		if (outcome.warnings) warnings.push(...outcome.warnings);
+
+		let gate: TraversalResult["gate"];
+		if (this.config.gateEnabled) {
+			const answer = outcome.answers[GATE_QUESTION];
+			if (answer && answer.type === "noul" && typeof answer.noul === "number") {
+				gate = { needed: answer.noul >= this.config.gateThreshold, probability: answer.noul };
+				if (!gate.needed) {
+					return finish(
+						"skipped",
+						`gate says no reference needed (p=${answer.noul.toFixed(3)} < ${this.config.gateThreshold})`,
+						{ gate },
+					);
+				}
+			} else {
+				this.logger.debug("gate question returned no noul answer; continuing without it");
+			}
+		}
+
+		const answer = outcome.answers[ROUTE_QUESTION];
+		if (!answer || answer.type !== "choice") {
+			return this.withFallback(finish, visited, "error", "decisions API returned no choice answer", gate);
+		}
+
+		const entry = root.entries.find((candidate) => candidate.id === answer.choice);
+		if (!entry) {
+			// Guard against a label that is not on the menu; without this the
+			// traverser would try to descend into a directory that does not exist.
+			return this.withFallback(
+				finish,
+				visited,
+				"error",
+				`model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(rootDir)}/_index.json`,
+				gate,
+			);
+		}
+
+		const firstHop = this.hop(root, entry, answer, outcome.serverMs ?? outcome.latencyMs);
+
+		/** The route is the top choice's walk: its note, or the fallback when it found none. */
+		const conclude = (branch: BranchResult): TraversalResult => {
+			hops.push(...branch.hops);
+			segments.push(...branch.segments.slice(1));
+			warnings.push(...branch.warnings);
+			if (branch.document) {
+				const document = allocateUnifiedContextBudget([branch.document], this.config.maxDocumentChars)[0];
+				return finish("leaf", branch.reason, { document, gate });
+			}
+			if (branch.serviceDown) return finish("error", branch.reason, { gate });
+			return this.withFallback(finish, branch.visited, branch.status, branch.reason, gate);
+		};
+
+		const runnersUp = this.runnersUp(root, entry, answer, firstHop.confidence);
+		if (runnersUp.length === 0) {
+			return conclude(await this.walk(root, entry, firstHop, true, state, deadline, visited));
+		}
+
+		// Composite routing: walk the top choice and its close runners-up in parallel.
+		const branches = await Promise.all([
+			this.walk(root, entry, firstHop, true, state, deadline, visited),
+			...runnersUp.map((candidate) =>
+				this.walk(
+					root,
+					candidate,
+					// One request decided every first hop; its latency is counted on the top choice only.
+					this.hop(root, candidate, answer, 0, choiceConfidence({ choice: candidate.id, probabilities: answer.probabilities })),
+					false,
+					state,
+					deadline,
+					visited,
+				),
+			),
+		]);
+
+		const uniqueDocs: TraversalDocument[] = [];
+		const seenPaths = new Set<string>();
+		for (const branch of branches) {
+			if (branch.document && !seenPaths.has(branch.document.path)) {
+				seenPaths.add(branch.document.path);
+				uniqueDocs.push({ ...branch.document, confidence: branch.minConfidence, trail: branch.segments.join(" -> ") });
+			}
+		}
+
+		// A runner-up never stands alone: on its own it was not confident enough to route to.
+		if (uniqueDocs.length < 2) return conclude(branches[0]);
+
+		for (const branch of branches) {
+			hops.push(...branch.hops);
+			warnings.push(...branch.warnings);
+		}
+		const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
+		return finish("composite", `composite route resolved ${budgeted.length} complementary guides`, {
+			document: budgeted[0],
+			documents: budgeted,
+			composite: true,
+			trail: `Composite [${budgeted.map((d) => d.trail ?? d.path).join(", ")}]`,
+			minConfidence: Math.min(...budgeted.map((d) => d.confidence ?? 1)),
 			gate,
-		);
+		});
 	}
 
 	// -----------------------------------------------------------------------
@@ -535,280 +466,131 @@ export class BrainTraverser {
 		return budgeted[0] ?? null;
 	}
 
-	private async traverseBranch(
-		parentManifest: LoadedManifest,
-		fromDir: string,
+	private hop(manifest: LoadedManifest, entry: ManifestEntry, answer: ChoiceAnswer, latencyMs: number, confidence = choiceConfidence(answer)): Hop {
+		return {
+			from: this.manifests.relativeToVault(manifest.dir),
+			chosen: entry.id,
+			type: entry.type,
+			confidence,
+			latencyMs,
+			probabilities: answer.probabilities,
+			optionCount: manifest.entries.length,
+		};
+	}
+
+	/** Root options close enough to the top choice to route to alongside it, best first. */
+	private runnersUp(root: LoadedManifest, entry: ManifestEntry, answer: ChoiceAnswer, confidence: number): ManifestEntry[] {
+		const probabilities = answer.probabilities;
+		const maxDocs = this.config.maxCompositeDocuments ?? 2;
+		if (this.config.compositeEnabled === false || maxDocs < 2 || confidence < this.config.minConfidence || !probabilities) {
+			return [];
+		}
+		const threshold = this.config.compositeThreshold ?? 0.25;
+		const marginRatio = this.config.compositeMarginRatio ?? 0.65;
+		const winnerProb = probabilities[entry.id] ?? confidence;
+		return root.entries
+			.filter((candidate) => {
+				if (candidate.id === entry.id) return false;
+				const p = probabilities[candidate.id];
+				return typeof p === "number" && Number.isFinite(p) && p >= threshold && p >= winnerProb * marginRatio;
+			})
+			.sort((a, b) => probabilities[b.id] - probabilities[a.id])
+			.slice(0, maxDocs - 1);
+	}
+
+	/**
+	 * Walk down from `entry`, the root's choice already decided as `firstHop`, to a leaf.
+	 * `checkFirst` holds that first hop to the confidence threshold too; a composite
+	 * runner-up skips it, having passed the composite threshold instead.
+	 */
+	private async walk(
+		root: LoadedManifest,
 		entry: ManifestEntry,
-		hop0Confidence: number,
-		hop0Probabilities: Record<string, number> | undefined,
-		hop0ActProbability: number | undefined,
+		firstHop: Hop,
+		checkFirst: boolean,
 		state: string,
 		deadline: number | undefined,
 		visited: LoadedManifest[],
-	): Promise<{
-		entry: ManifestEntry;
-		document: TraversalDocument | null;
-		hops: Hop[];
-		segments: string[];
-		minConfidence: number;
-		status: TraversalStatus;
-		reason: string;
-		warnings: string[];
-	}> {
-		const hops: Hop[] = [];
-		const segments = [
-			this.manifests.relativeToVault(fromDir) || "Root",
-			entry.type === "leaf" ? basename(entry.targetPath) : entry.id,
-		];
+	): Promise<BranchResult> {
+		const hops: Hop[] = [firstHop];
+		const segments = ["Root", label(entry)];
 		const warnings: string[] = [];
 		const branchVisited = [...visited];
 
-		hops.push({
-			from: this.manifests.relativeToVault(fromDir),
-			chosen: entry.id,
-			type: entry.type,
-			confidence: hop0Confidence,
-			latencyMs: 0,
-			probabilities: hop0Probabilities,
-			optionCount: parentManifest.entries.length,
-			...(typeof hop0ActProbability === "number" ? { actProbability: hop0ActProbability } : {}),
+		const end = (status: TraversalStatus, reason: string, document: TraversalDocument | null = null, serviceDown = false): BranchResult => ({
+			document,
+			hops,
+			segments,
+			visited: branchVisited,
+			minConfidence: Math.min(...hops.map((h) => h.confidence)),
+			status,
+			reason,
+			warnings,
+			...(serviceDown ? { serviceDown } : {}),
 		});
 
-		if (entry.type === "leaf") {
+		const unsure = (hop: Hop, n: number): BranchResult | null => {
+			if (hop.confidence < this.config.minConfidence) {
+				return end("low-confidence", `confidence ${hop.confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${n}`);
+			}
+			return null;
+		};
+
+		if (checkFirst) {
+			const stop = unsure(firstHop, 1);
+			if (stop) return stop;
+		}
+
+		let manifest = root;
+		let chosen = entry;
+		for (let hop = 1; ; hop++) {
 			let target: string;
 			try {
-				target = this.manifests.resolveTarget(parentManifest, entry);
+				target = this.manifests.resolveTarget(manifest, chosen);
 			} catch (error) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: hop0Confidence,
-					status: "error",
-					reason: (error as Error).message,
-					warnings,
-				};
+				return end("error", (error as Error).message);
 			}
-			const document = this.readRawDocument(target, entry);
-			if (!document) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: hop0Confidence,
-					status: "error",
-					reason: `leaf '${entry.id}' points at a missing file: ${entry.targetPath}`,
-					warnings,
-				};
+
+			if (chosen.type === "leaf") {
+				const document = this.readRawDocument(target, chosen);
+				if (!document) return end("error", `leaf '${chosen.id}' points at a missing file: ${chosen.targetPath}`);
+				return end("leaf", `routed in ${hops.length} hop(s)`, document);
 			}
-			return {
-				entry,
-				document,
-				hops,
-				segments,
-				minConfidence: hop0Confidence,
-				status: "leaf",
-				reason: `routed in 1 hop`,
-				warnings,
-			};
-		}
+			if (hop >= this.config.maxHops) {
+				return end("max-hops", `hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`);
+			}
 
-		let dir: string;
-		try {
-			dir = this.manifests.resolveTarget(parentManifest, entry);
-		} catch (error) {
-			return {
-				entry,
-				document: null,
-				hops,
-				segments,
-				minConfidence: hop0Confidence,
-				status: "error",
-				reason: (error as Error).message,
-				warnings,
-			};
-		}
-
-		for (let hop = 1; hop < this.config.maxHops; hop++) {
-			let manifest: LoadedManifest | null;
+			let next: LoadedManifest | null;
 			try {
-				manifest = this.manifests.load(dir);
+				next = this.manifests.load(target);
 			} catch (error) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "error",
-					reason: error instanceof ManifestError ? `malformed manifest: ${error.message}` : (error as Error).message,
-					warnings,
-				};
+				return end("error", error instanceof ManifestError ? `malformed manifest: ${error.message}` : (error as Error).message);
 			}
-
-			if (!manifest) {
-				const where = this.manifests.relativeToVault(dir);
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "no-index",
-					reason: `no _index.json in '${where}'`,
-					warnings,
-				};
-			}
+			// A branch pointing at a directory with no manifest is a vault bug,
+			// not a reason to abandon the turn.
+			if (!next) return end("no-index", `no _index.json in '${this.manifests.relativeToVault(target)}'`);
+			manifest = next;
 			branchVisited.push(manifest);
 
-			const criteria: Record<string, string> = {};
-			for (const e of manifest.entries) criteria[e.id] = e.criteria;
-
-			const questions: Record<string, Question> = {
-				[ROUTE_QUESTION]: { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria },
-			};
-
-			const outcome = await this.client.ask(state, questions, { deadline });
-			if (!outcome.ok) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "error",
-					reason: `decisions API failed: ${outcome.error}`,
-					warnings,
-				};
-			}
+			const outcome = await this.client.ask(state, { [ROUTE_QUESTION]: routeQuestion(manifest) }, { deadline });
+			if (!outcome.ok) return end("error", `decisions API failed: ${outcome.error}`, null, true);
 			if (outcome.warnings) warnings.push(...outcome.warnings);
 
 			const answer = outcome.answers[ROUTE_QUESTION];
-			if (!answer || answer.type !== "choice") {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "error",
-					reason: "decisions API returned no choice answer",
-					warnings,
-				};
+			if (!answer || answer.type !== "choice") return end("error", "decisions API returned no choice answer");
+
+			const found = manifest.entries.find((candidate) => candidate.id === answer.choice);
+			if (!found) {
+				return end("error", `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(target)}/_index.json`);
 			}
+			chosen = found;
 
-			const chosenEntry = manifest.entries.find((c) => c.id === answer.choice);
-			if (!chosenEntry) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "error",
-					reason: `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(dir)}/_index.json`,
-					warnings,
-				};
-			}
-
-			const confidence = choiceConfidence(answer);
-			const actProbability = answer.action?.act_probability;
-			hops.push({
-				from: this.manifests.relativeToVault(dir),
-				chosen: chosenEntry.id,
-				type: chosenEntry.type,
-				confidence,
-				latencyMs: outcome.serverMs ?? outcome.latencyMs,
-				probabilities: answer.probabilities,
-				optionCount: manifest.entries.length,
-				...(typeof actProbability === "number" ? { actProbability } : {}),
-			});
-			segments.push(chosenEntry.type === "leaf" ? basename(chosenEntry.targetPath) : chosenEntry.id);
-
-			if (confidence < this.config.minConfidence) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "low-confidence",
-					reason: `confidence ${confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${hop + 1}`,
-					warnings,
-				};
-			}
-
-			const minAct = this.config.minActProbability ?? 0;
-			if (minAct > 0 && typeof actProbability === "number" && actProbability < minAct) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "low-confidence",
-					reason: `act probability ${actProbability.toFixed(3)} below threshold ${minAct} at hop ${hop + 1}`,
-					warnings,
-				};
-			}
-
-			let target: string;
-			try {
-				target = this.manifests.resolveTarget(manifest, chosenEntry);
-			} catch (error) {
-				return {
-					entry,
-					document: null,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "error",
-					reason: (error as Error).message,
-					warnings,
-				};
-			}
-
-			if (chosenEntry.type === "leaf") {
-				const document = this.readRawDocument(target, chosenEntry);
-				if (!document) {
-					return {
-						entry,
-						document: null,
-						hops,
-						segments,
-						minConfidence: Math.min(...hops.map((h) => h.confidence)),
-						status: "error",
-						reason: `leaf '${chosenEntry.id}' points at a missing file: ${chosenEntry.targetPath}`,
-						warnings,
-					};
-				}
-				return {
-					entry,
-					document,
-					hops,
-					segments,
-					minConfidence: Math.min(...hops.map((h) => h.confidence)),
-					status: "leaf",
-					reason: `routed in ${hops.length} hop(s)`,
-					warnings,
-				};
-			}
-
-			dir = target;
+			const taken = this.hop(manifest, chosen, answer, outcome.serverMs ?? outcome.latencyMs);
+			hops.push(taken);
+			segments.push(label(chosen));
+			const stop = unsure(taken, hop + 1);
+			if (stop) return stop;
 		}
-
-		return {
-			entry,
-			document: null,
-			hops,
-			segments,
-			minConfidence: Math.min(...hops.map((h) => h.confidence)),
-			status: "max-hops",
-			reason: `hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`,
-			warnings,
-		};
 	}
 
 	/**

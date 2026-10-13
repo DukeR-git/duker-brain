@@ -19,7 +19,7 @@ export const ABOUT_FILE = "_about.md";
 
 /**
  * The branching invariant. A decision model spreads a fixed option budget over
- * every label in a question (Laya reserves 192 tokens for all of them), so each
+ * every label in a question, so past this each
  * option gets too little room to describe itself above this.
  */
 export const MAX_CHILDREN = 15;

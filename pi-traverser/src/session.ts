@@ -28,19 +28,6 @@ export interface InjectionPlan {
 	documents: TraversalDocument[];
 }
 
-/**
- * Trivial follow-up prompts that need no background manual (a one-word
- * confirmation, a greeting, "continue"). Short-circuiting them locally saves
- * the gate request, network round-trip, and avoids injecting noise.
- */
-const TRIVIAL_PROMPT =
-	/^(?:yes|yep|yeah|no|nope|ok|okay|sure|thanks|thank you|continue|proceed|go ahead|done|next|agree|looks good|lgtm)[.!]?$/i;
-
-export function isTrivialFollowUp(prompt: string): boolean {
-	const cleaned = prompt.replace(/\s+/g, " ").trim();
-	return TRIVIAL_PROMPT.test(cleaned);
-}
-
 export function resultDocuments(result: TraversalResult): TraversalDocument[] {
 	return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
 }

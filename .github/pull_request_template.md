@@ -9,7 +9,6 @@
 ## Checklist
 
 - [ ] `npm run typecheck`, `npm test` and `npm run build` pass
-- [ ] `pytest` passes in `host-laya` (only if it changed)
 - [ ] Tests added or updated
 - [ ] README updated if behaviour or configuration changed
 - [ ] Line added under `Unreleased` in CHANGELOG.md for user-visible changes

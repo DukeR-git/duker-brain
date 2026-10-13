@@ -296,15 +296,7 @@ describe("brain_check_routing", () => {
 
 		assert.equal(result.isError, true);
 		assert.match(result.text, /failed to reach the decisions service/);
-		assert.match(result.text, /Check that the Laya host is running/, "a local URL points at the host");
-
-		const remote = await call(
-			vault(),
-			"brain_check_routing",
-			{ prompts: [{ prompt: "anything" }] },
-			{ decisionsUrl: "http://203.0.113.1:9", timeoutMs: 100, retries: 0 },
-		);
-		assert.match(remote.text, /Set TYPESAFE_API_KEY/, "a remote URL without a key points at the key");
+		assert.match(result.text, /self-hosted service is running/, "no key is demanded of a self-hosted service");
 	});
 
 	it("routes with the same thresholds the router uses", async () => {

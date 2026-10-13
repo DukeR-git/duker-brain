@@ -17,10 +17,8 @@ routing. See [CHANGELOG.md](../CHANGELOG.md).
 - **Installable without cloning.** Publish to npm so MCP users can run
   `npx brain-keeper serve`. The self-contained `dist/` bundles can be the
   published entry points.
-- **Linting and formatting** for the TypeScript (Biome, or ESLint and Prettier)
-  and Python (`ruff`), enforced in CI.
-- **host-laya beyond Intel Arc.** CUDA and CPU compose profiles, and Apple
-  Silicon (MPS) where the checkpoint supports it, chosen at container start.
+- **Linting and formatting** for the TypeScript (Biome, or ESLint and Prettier),
+  enforced in CI.
 
 ## Authoring the brain
 
@@ -56,8 +54,3 @@ routing. See [CHANGELOG.md](../CHANGELOG.md).
   hops, compare sibling criteria, and chart route-log statistics.
 - **Obsidian plugin**: show criteria and the 15-child limit inside Obsidian, and
   test how a prompt routes without leaving it.
-
-## host-laya
-
-- **Quantised checkpoints** (8-bit and 4-bit) to cut VRAM use well below the
-  current ~1.7 GB, so Laya fits beside a large LLM on one consumer card.

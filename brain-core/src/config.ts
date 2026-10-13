@@ -22,8 +22,8 @@ import {
 	DEFAULT_MODEL,
 	JEV_URL,
 	TYPESAFE_KEY_ENV,
-	defaultRouteBudget,
-	defaultTimeout,
+	DEFAULT_ROUTE_BUDGET_MS,
+	DEFAULT_TIMEOUT_MS,
 	readConfigFiles,
 	resolveApiKey,
 	resolveUserPath,
@@ -38,29 +38,27 @@ export interface BrainConfig {
 	/** Absolute path to the Obsidian vault root holding the top-level `_index.json`. */
 	vaultRoot: string;
 
-	/** Base URL of the decisions API: https://api.typesafe.ai for Jev, or a self-hosted Laya. */
+	/** Base URL of the decisions API: TypeSafe Jev, or a self-hosted service with the same API. */
 	decisionsUrl: string;
-	/** `/v1/systemone` (Jev's endpoint, also served by host-laya) or host-laya's `/v1/decisions` alias. */
+	/** Jev's `/v1/systemone`. */
 	decisionsPath: string;
-	/** Bearer token. Required by Jev, and by a Laya host started with `LAYA_API_KEY`. */
+	/** Bearer token. Required by Jev; a self-hosted service may need none. */
 	apiKey?: string;
-	/** The `model` sent with every request. Jev reads it; Laya ignores it. */
+	/** The Jev `model` sent with every request. */
 	model: string;
-	/** Per-request timeout. Derived from `decisionsUrl` when 0: 500ms on the local network, 2000ms remote. */
+	/** Per-request timeout; 0 means the default, 2000ms. */
 	timeoutMs: number;
 	/** Retries on network error, 429 or 5xx, within `routeBudgetMs`. */
 	retries: number;
-	/** Ceiling on a whole route, every hop and retry included. Derived when 0: 1000ms local, 3000ms remote. */
+	/** Ceiling on a whole route, every hop and retry included; 0 means the default, 3000ms. */
 	routeBudgetMs: number;
 
 	/** Hard ceiling on hops, so a malformed vault cannot loop forever. */
 	maxHops: number;
 	/** Below this, stop traversing and fall back. */
 	minConfidence: number;
-	/** Laya only: below this act probability, treat a hop as unsure. 0 disables the check. */
-	minActProbability: number;
 
-	/** Ask "does this prompt need a manual?" before routing. Rides in hop 1's forward pass. */
+	/** Ask "does this prompt need a manual?" before routing. Rides in hop 1's request. */
 	gateEnabled: boolean;
 	/** Noul probability at or above which a reference guide is considered needed. */
 	gateThreshold: number;
@@ -75,8 +73,8 @@ export interface BrainConfig {
 	/** Guard against a huge note eating the agent model's context. */
 	maxDocumentChars: number;
 	/**
-	 * How much of the user prompt is sent as the decision `state`. Laya's English
-	 * checkpoint has a 512-token context and the criteria block shares it.
+	 * How much of the user prompt is sent as the decision `state`. The decision
+	 * model's context is small, and the criteria block shares it.
 	 */
 	maxPromptChars: number;
 
@@ -133,7 +131,6 @@ const SETTINGS: Record<SettingKey, Setting> = {
 	routeBudgetMs: { kind: "integer", env: "BRAIN_ROUTE_BUDGET_MS", min: 0 },
 	maxHops: { kind: "integer", env: "BRAIN_MAX_HOPS", min: 1, max: 16 },
 	minConfidence: { kind: "number", env: "BRAIN_MIN_CONFIDENCE", min: 0, max: 1 },
-	minActProbability: { kind: "number", env: "BRAIN_MIN_ACT_PROBABILITY", min: 0, max: 1 },
 	gateEnabled: { kind: "boolean", env: "BRAIN_GATE_ENABLED" },
 	gateThreshold: { kind: "number", env: "BRAIN_GATE_THRESHOLD", min: 0, max: 1 },
 	fallbackDocument: { kind: "string", env: "BRAIN_FALLBACK_DOC" },
@@ -162,9 +159,8 @@ export const DEFAULTS: Omit<BrainConfig, "sources" | "warnings"> = {
 	routeBudgetMs: 0,
 	maxHops: 4,
 	minConfidence: 0.4,
-	minActProbability: 0,
 	gateEnabled: true,
-	gateThreshold: 0.5,
+	gateThreshold: 0.2,
 	fallbackDocument: "auto",
 	maxDocumentChars: 12000,
 	maxPromptChars: 1500,
@@ -285,14 +281,10 @@ export function loadConfig(options: LoadOptions = {}): BrainConfig {
 	config.vaultRoot = config.vaultRoot.trim();
 	if (config.vaultRoot) config.vaultRoot = resolveUserPath(config.vaultRoot, cwd);
 	if (!config.timeoutMs) {
-		// A local forward pass is ~35ms; anything near 500ms means the service is
-		// wedged and the agent should proceed without context rather than stall.
-		config.timeoutMs = defaultTimeout(config.decisionsUrl);
-		sources.timeoutMs = `derived from ${config.decisionsUrl}`;
+		config.timeoutMs = DEFAULT_TIMEOUT_MS;
 	}
 	if (!config.routeBudgetMs) {
-		config.routeBudgetMs = Math.max(defaultRouteBudget(config.decisionsUrl), config.timeoutMs);
-		sources.routeBudgetMs = `derived from ${config.decisionsUrl}`;
+		config.routeBudgetMs = Math.max(DEFAULT_ROUTE_BUDGET_MS, config.timeoutMs);
 	}
 
 	return config;

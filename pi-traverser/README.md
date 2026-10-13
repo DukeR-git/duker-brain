@@ -1,17 +1,17 @@
-# pi-traverser — the router (Part 2)
+# pi-traverser — the router
 
 The traversal engine, the Pi extension and the Claude Code hook. Takes the user's prompt, walks the
-Obsidian vault by asking a decisions API (the hosted TypeSafe Jev API by default,
-or a self-hosted Laya) to pick a child at each level, and injects the matching
+Obsidian vault by asking a decisions API (the hosted TypeSafe Jev API by
+default, or a self-hosted service with the same API) to pick a child at each
+level, and injects the matching
 reference guide into the agent's context.
 
-This is Part 2 of [the architecture plan](../docs/architecture-plan.md). It
-shares its vault model with [../brain-core](../brain-core) and reads the
+It shares its vault model with [../brain-core](../brain-core) and reads the
 manifests that [../brain-keeper](../brain-keeper) writes. It is installed by
 `pi install` from the repository root; see [Installing into Pi](#5-installing-into-pi).
 
 ```
-prompt ──> gate + hop 1 (one forward pass) ──> hop 2 ──> leaf .md
+prompt ──> gate + hop 1 (one request) ──> hop 2 ──> leaf .md
              │                                              │
              └── "no reference needed" ──> inject nothing    └──> LLM-visible message
 ```
@@ -56,8 +56,8 @@ misroutes, you need to iterate on criteria text without restarting Pi every time
 |---|---|
 | `route "<prompt>"` | Route one prompt; prints the trail, per-hop confidence, and the injected block. `--quiet` omits the document, `--json` emits the raw result, `-v` adds probabilities. |
 | `lint` | Validate every `_index.json` in the vault: schema, duplicate ids, missing targets, branches without manifests, the ≤15 rule, thin criteria — and whether any manifest is stale against its notes. |
-| `health` | Check the decisions API: which backend answered (Jev or Laya), the model, and whether the API key is accepted. |
-| `bench [-n N]` | Route the same prompt N times; reports p50/p90/p99. Against a local host it gates on the plan's 100 ms budget; pass `--budget <ms>` to gate a remote one. |
+| `health` | Check the decisions API (Jev or self-hosted): does it answer, and is the API key accepted? |
+| `bench [-n N]` | Route the same prompt N times; reports p50/p90/p99. Pass `--budget <ms>` to fail when p50 is over it. |
 | `config` | Print the resolved configuration, where each value came from, and any setting that was ignored and why. |
 | `stats` | Summarise the routing log: what gets injected, notes that never are, folders where routing gives up, and near ties between siblings. |
 
@@ -70,8 +70,8 @@ runtime (the traverser falls back) but obvious to the linter.
 
 ## 3. How routing works
 
-**One request covers the gate and the first hop.** Laya answers every question
-in a request in a single forward pass, so the "does this prompt even need a
+**One request covers the gate and the first hop.** The decisions API answers
+every question in a request together, so the "does this prompt even need a
 reference manual?" check rides along with the root choice instead of costing its
 own round trip. A 2-hop route is two HTTP requests, not three.
 
@@ -91,7 +91,7 @@ descends; a `leaf` is read from disk and returned.
 |---|---|
 | A bare acknowledgement ("yes", "thanks", "continue") | `skipped` — no request at all |
 | Gate probability < `gateThreshold` | `skipped` — nothing injected |
-| Hop confidence < `minConfidence` (or act probability < `minActProbability`, Laya only) | stop, use the nearest catch-all |
+| Hop confidence < `minConfidence` | stop, use the nearest catch-all |
 | Chosen label is not in the manifest | stop, use the nearest catch-all |
 | Branch target has no `_index.json` | stop, use the nearest catch-all |
 | `maxHops` reached without a leaf | stop, use the nearest catch-all |
@@ -233,18 +233,17 @@ key is ignored with a warning — and `/brain config` shows the warnings.
 | Key | Env | Default | Meaning |
 |---|---|---|---|
 | `vaultRoot` | `BRAIN_VAULT_ROOT` | — | Vault root holding the top-level `_index.json`. Required. |
-| `decisionsUrl` | `BRAIN_DECISIONS_URL` | `https://api.typesafe.ai` | Hosted Jev, or a self-hosted Laya such as `http://my-server:8081`. |
-| `decisionsPath` | `BRAIN_DECISIONS_PATH` | `/v1/systemone` | Served by both Jev and host-laya. host-laya also accepts `/v1/decisions`. |
-| `apiKey` | `TYPESAFE_API_KEY` / `BRAIN_DECISIONS_API_KEY` | — | Bearer token for Jev; the `BRAIN_` variable wins if both are set. A local Laya needs none. |
-| `model` | `BRAIN_DECISIONS_MODEL` | `jev-latest` | Sent with every request. Pin e.g. `jev-1.13.0` once thresholds are tuned. Laya ignores it. |
-| `timeoutMs` | `BRAIN_TIMEOUT_MS` | 500 local / 2000 remote | Per request. Derived from the URL if unset; "local" includes LAN addresses and bare host names. |
-| `retries` | `BRAIN_RETRIES` | `1` | On network error, 429 or 5xx, with a short back-off. 503 is what host-laya returns while loading. |
-| `routeBudgetMs` | `BRAIN_ROUTE_BUDGET_MS` | 1000 local / 3000 remote | Ceiling on a whole route, every hop and retry included. |
+| `decisionsUrl` | `BRAIN_DECISIONS_URL` | `https://api.typesafe.ai` | Hosted Jev, or a self-hosted service with the same API, e.g. `http://my-server:8081`. |
+| `decisionsPath` | `BRAIN_DECISIONS_PATH` | `/v1/systemone` | Jev's endpoint; a self-hosted service must serve it too. |
+| `apiKey` | `TYPESAFE_API_KEY` / `BRAIN_DECISIONS_API_KEY` | — | Bearer token. Required by Jev; a self-hosted service needs one only if it checks it. The `BRAIN_` variable wins if both are set. |
+| `model` | `BRAIN_DECISIONS_MODEL` | `jev-latest` | Sent with every request. Pin e.g. `jev-1.13.0` once thresholds are tuned. |
+| `timeoutMs` | `BRAIN_TIMEOUT_MS` | `2000` | Per request. |
+| `retries` | `BRAIN_RETRIES` | `1` | On network error, 429 or 5xx, with a short back-off. |
+| `routeBudgetMs` | `BRAIN_ROUTE_BUDGET_MS` | `3000` | Ceiling on a whole route, every hop and retry included. |
 | `maxHops` | `BRAIN_MAX_HOPS` | `4` | Hard ceiling. The doctor flags folders deeper than this. |
 | `minConfidence` | `BRAIN_MIN_CONFIDENCE` | `0.4` | Below this, fall back. Read from `probabilities` when a backend omits `confidence`. |
-| `minActProbability` | `BRAIN_MIN_ACT_PROBABILITY` | `0` (off) | Laya only: below this act/abstain probability, fall back too. |
 | `gateEnabled` | `BRAIN_GATE_ENABLED` | `true` | The "needs a manual?" pre-check. |
-| `gateThreshold` | `BRAIN_GATE_THRESHOLD` | `0.5` | Noul probability to proceed. |
+| `gateThreshold` | `BRAIN_GATE_THRESHOLD` | `0.2` | Noul probability to proceed. |
 | `fallbackDocument` | `BRAIN_FALLBACK_DOC` | `auto` | The nearest note marked `fallback: true`; or a vault-relative path; `""` disables. |
 | `maxDocumentChars` | `BRAIN_MAX_DOC_CHARS` | `12000` | Injected-document cap. |
 | `maxPromptChars` | `BRAIN_MAX_PROMPT_CHARS` | `1500` | Prompt slice sent as decision state. |
@@ -257,17 +256,12 @@ key is ignored with a warning — and `/brain config` shows the warnings.
 
 ### Tuning notes
 
-`maxPromptChars` exists because Laya's English checkpoint has a 512-token
-context that the criteria block shares. A pasted stack trace would crowd out the
-options; the routing signal is almost always in the opening lines, so the head
-is kept. Jev's context is far larger, but Jev bills per input token, so the same
-cap still pays off there.
+`maxPromptChars` keeps a pasted stack trace from crowding out the options. The
+routing signal is almost always in the opening lines, so the head is kept, and
+Jev bills per input token, so the cap also saves money.
 
-`minConfidence` at 0.4 is the plan's number and a reasonable start. Raise it
-if you see confident-looking misroutes — and note that Laya's English checkpoint
-collapses on non-English input *while still reporting high confidence*, so if
-your prompts are not in English, use Jev or switch the Laya host to its
-multilingual checkpoint rather than raising this.
+`minConfidence` at 0.4 is a reasonable start. Raise it if you see
+confident-looking misroutes.
 
 ## 7. The fixture vault
 
@@ -276,7 +270,7 @@ multilingual checkpoint rather than raising this.
 describes itself in `_about.md`; the `_index.json` manifests are output from
 brain-keeper's compiler.
 
-It is shared by all three test suites, so `npm test` runs without a GPU, and it
+It is shared by all three test suites, and it
 is what `brain-keeper init --example` copies into a new vault. One
 brain-core test asserts that recompiling it produces no diff — that is what keeps
 the reader and the writer honest about each other.
@@ -284,12 +278,12 @@ the reader and the writer honest about each other.
 ## 8. Tests
 
 ```bash
-npm test          # 43 tests here; the traversal suite lives in brain-core
+npm test          # 71 tests here; the traversal suite lives in brain-core
 npm run typecheck
 ```
 
 Traversal, manifests, frontmatter and config validation are tested in
-[../brain-core](../brain-core) (146 tests), since that is where they live.
+[../brain-core](../brain-core) (169 tests), since that is where they live.
 What stays here covers the Pi extension itself: that it injects a message and
 never a `systemPrompt`, that it pauses when the service is unreachable or Jev
 has no key and resumes when the service comes back, the reminder instead of a
@@ -297,12 +291,9 @@ repeated guide, the routing log, the `/brain` command, the injection block's
 format, and the CLI run as a real process. The factory takes its environment
 and clock as options, so no test touches `process.env`.
 
-Both suites drive a mock decisions server that can imitate either backend, so
-nothing needs a GPU, a network or an API key.
-
-For an end-to-end check against the real service, run the CLI with a key set
-(or the Laya host up). `bench` is the quickest check of latency; the plan's
-100 ms budget assumes a local Laya, so it is only enforced for a local URL.
+Both suites drive a mock of the Jev API, so nothing needs a network or an API
+key. For an end-to-end check against the real service, run the CLI with a key
+set; `bench` is the quickest check of latency.
 
 ## 9. Layout
 
@@ -322,23 +313,10 @@ pi-traverser/
 └── test/                      the Pi extension and config suites
 ```
 
-## 10. Where this deviates from the plan
+## 10. Related
 
-| Plan says | Reality | What was done |
-|---|---|---|
-| Default endpoint is local Laya on `:8081` | Most users have no GPU box to host it on | Defaults to hosted Jev; a local Laya is one config line. |
-| Hook is `before_prompt` | Pi's hook is `before_agent_start` | Uses the real hook name. |
-| "Prepend the document to the system prompt" | Returning `systemPrompt` replaces the turn's prompt and busts the prefix cache | Injects an LLM-visible message instead. |
-| Confidence gate only | Every prompt pays a traversal, including "thanks" | Added a noul pre-check, batched into hop 1's forward pass so it is nearly free. |
-| Low confidence → stop *or* fall back | Ambiguous | Falls back to the nearest catch-all (the folder's own, else the root's); with none, reports `low-confidence` and injects nothing. |
-| Missing index → return `null` | — | Distinct statuses (`no-index`, `error`, `max-hops`, …) so `/brain trace` says *why* nothing was injected. |
-| — | Not in the plan | Refuses a `targetPath` that escapes the vault root. |
-
-## 11. Related
-
-- [../host-laya](../host-laya) — optional self-hosted decisions service (Part 1)
 - [../brain-core](../brain-core) — the shared vault model and the traversal engine
-- [../brain-keeper](../brain-keeper) — MCP tools for writing to the brain (Part 3)
+- [../brain-keeper](../brain-keeper) — MCP tools for writing to the brain
 
 `bin/brain-traverse.ts lint` and `brain-keeper doctor` overlap deliberately: lint
 validates the compiled manifests from the reader's point of view, doctor
