@@ -2,7 +2,6 @@
  * The one test that talks to a real decisions service. Opt-in:
  *
  *   BRAIN_LIVE_URL=https://api.typesafe.ai TYPESAFE_API_KEY=sk-... npm test
- *   BRAIN_LIVE_URL=http://my-server:8081 npm test
  *
  * It checks the contract, not the model's taste: the service answers, the
  * answer is on the menu, and the fixture vault routes to *some* leaf or
@@ -12,7 +11,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, defaultTimeout, resolveApiKey } from "../src/env.js";
+import { DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, resolveApiKey } from "../src/env.js";
 import { DecisionsClient } from "../src/decisions-client.js";
 import { Logger } from "../src/logger.js";
 import { BrainTraverser } from "../src/traverser.js";
@@ -27,7 +26,7 @@ describe("live decisions service", { skip: url ? false : "set BRAIN_LIVE_URL to 
 		path: process.env.BRAIN_DECISIONS_PATH?.trim() || DEFAULT_DECISIONS_PATH,
 		apiKey: resolveApiKey(process.env),
 		model: process.env.BRAIN_DECISIONS_MODEL?.trim() || DEFAULT_MODEL,
-		timeoutMs: Math.max(defaultTimeout(url ?? ""), 5000),
+		timeoutMs: 5000,
 		retries: 1,
 		logger,
 	});

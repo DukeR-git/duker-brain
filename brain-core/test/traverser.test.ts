@@ -170,17 +170,6 @@ describe("guardrails", () => {
 		assert.equal(mock.requests.length, 1, "stops traversing at the weak hop");
 	});
 
-	it("treats a low act probability as an unsure hop when asked to", async () => {
-		mock.behaviour = { actProbability: 0.2 };
-		const result = await route("How do I configure connection pooling for asyncpg in FastAPI?", { minActProbability: 0.5 });
-		assert.equal(result.status, "fallback");
-		assert.match(result.reason, /act probability 0\.200 below threshold 0\.5/);
-		assert.equal(result.hops[0].actProbability, 0.2);
-
-		const ignored = await route("How do I configure connection pooling for asyncpg in FastAPI?");
-		assert.equal(ignored.status, "leaf", "off by default");
-	});
-
 	it("falls back when the model answers with a label that is not on the menu", async () => {
 		mock.behaviour = { offMenu: true };
 		const result = await route("anything");
@@ -233,8 +222,7 @@ describe("guardrails", () => {
 	});
 
 	it("retries a 5xx once by default, and not more", async () => {
-		// 503 is what the Laya host returns while its checkpoint is still loading,
-		// so one retry is worth it - but the turn must not wait for three.
+		// One retry is worth it - but the turn must not wait for three.
 		mock.behaviour = { failWith: 503 };
 		const result = await route("anything");
 
@@ -440,6 +428,28 @@ describe("composite routing", () => {
 		const ids = result.documents.map((d) => d.id).sort();
 		assert.deepEqual(ids, ["asyncpg_pooling", "docker_deploy"]);
 		assert.match(result.trail, /^Composite \[/);
+		mock.behaviour = {};
+	});
+
+	it("never routes to a runner-up alone, and does not re-ask when the top choice finds nothing", async () => {
+		mock.behaviour = {
+			omitConfidence: true,
+			probabilities: (options): Record<string, number> => {
+				if (options.includes("backend")) return { backend: 0.45, infrastructure: 0.3, frontend: 0.2, general_instructions: 0.05 };
+				if (options.includes("asyncpg_pooling")) return { asyncpg_pooling: 0.3, celery_jobs: 0.25, fastapi_core: 0.25, sql_indexing: 0.2 };
+				return { docker_deploy: 0.89, github_actions: 0.11 };
+			},
+			chooseBy: (options) => (options.includes("backend") ? "backend" : options[0]),
+		};
+
+		// infrastructure (0.30) is below minConfidence (0.4): it may join backend, never replace it.
+		const result = await route("Deploy our FastAPI asyncpg backend with Docker", { useCache: false });
+
+		assert.equal(result.status, "fallback");
+		assert.equal(result.document?.path, "general_instructions.md");
+		assert.equal(result.trail, "Root -> backend -> asyncpg_pooling.md");
+		assert.equal(result.hops.length, 2);
+		assert.equal(mock.hits, 3); // root, Backend, Infrastructure: nothing asked twice
 		mock.behaviour = {};
 	});
 

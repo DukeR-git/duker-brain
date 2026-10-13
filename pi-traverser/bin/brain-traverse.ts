@@ -17,7 +17,6 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { numberFlag, parseArgs, runMain, type Args } from "../../brain-core/src/cli.js";
-import { isLocalUrl } from "../../brain-core/src/env.js";
 import { Logger } from "../../brain-core/src/logger.js";
 import {
 	MANIFEST_FILE,
@@ -291,12 +290,8 @@ async function cmdHealth(args: Args): Promise<number> {
 		return health.ok ? 0 : 1;
 	}
 
-	const lines = [`endpoint   ${client.endpoint}`, `backend    ${health.backend}`];
+	const lines = [`endpoint   ${client.endpoint}`];
 	if (health.model) lines.push(`model      ${health.model}`);
-	if (health.device) lines.push(`device     ${health.device}`);
-	for (const key of ["dtype", "load_seconds"]) {
-		if (health.detail && key in health.detail) lines.push(`${key.padEnd(10)} ${String(health.detail[key])}`);
-	}
 	lines.push(`status     ${health.ok ? "ready" : health.error}`);
 	process.stdout.write(lines.join("\n") + "\n");
 	return health.ok ? 0 : 1;
@@ -311,9 +306,8 @@ async function cmdBench(args: Args): Promise<number> {
 	for (const problem of [count.error, budgetFlag.error]) if (problem) throw new UsageError(problem);
 
 	const iterations = count.value ?? 20;
-	// The plan's 100ms budget assumes a Laya host next door; a remote API's
-	// round trip is network time this tool cannot judge, so there is no default gate.
-	const budget = budgetFlag.value ?? (isLocalUrl(config.decisionsUrl) ? 100 : undefined);
+	// A remote API's round trip is network time this tool cannot judge, so there is no default gate.
+	const budget = budgetFlag.value;
 	const prompt =
 		args.positional.join(" ").trim() || "How do I configure connection pooling for asyncpg in FastAPI?";
 	const { traverser } = createStack(config, new Logger("silent"));

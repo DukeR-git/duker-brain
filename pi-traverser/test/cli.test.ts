@@ -51,9 +51,9 @@ describe("brain-traverse", () => {
 		assert.match(bench.stderr, /-n must be at least 1/);
 	});
 
-	it("benches against a local host with the plan's budget", async () => {
+	it("benches against a latency budget", async () => {
 		mock.behaviour = {};
-		const { code, stdout } = await run(["bench", "-n", "3"]);
+		const { code, stdout } = await run(["bench", "-n", "3", "--budget", "100"]);
 		assert.equal(code, 0);
 		assert.match(stdout, /iterations 3/);
 		assert.match(stdout, /Budget: p50 < 100ms\. {2}PASS/);

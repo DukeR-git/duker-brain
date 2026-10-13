@@ -12,10 +12,9 @@ body:
     attributes:
       label: Component
       options:
-        - Router (Pi extension / brain-traverse CLI)
+        - Router (Claude Code hook / Pi extension / brain-traverse CLI)
         - Keeper (brain_* tools / MCP server / brain-keeper CLI)
         - brain-core
-        - host-laya
         - Documentation
     validations:
       required: true
@@ -50,7 +49,6 @@ body:
         OS:
         Node.js version:
         Harness (Pi / Claude Code / Codex / other) and version:
-        Decisions backend (Jev / Laya):
       render: text
     validations:
       required: true

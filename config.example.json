@@ -4,9 +4,10 @@
   "enabled": true,
   "vaultRoot": "~/brain",
 
-  "_comment_apiKey": "Optional bearer token: required for Jev and a password-protected Laya host. Prefer the TYPESAFE_API_KEY environment variable.",
+  "_comment_apiKey": "Your TypeSafe Jev key; a self-hosted service needs one only if it checks it. Prefer the TYPESAFE_API_KEY environment variable.",
   "apiKey": "",
 
+  "_comment_decisionsUrl": "Hosted Jev, or a self-hosted service with the same API, e.g. http://my-server:8081.",
   "decisionsUrl": "https://api.typesafe.ai",
   "decisionsPath": "/v1/systemone",
   "model": "jev-latest",
@@ -16,7 +17,6 @@
 
   "maxHops": 4,
   "minConfidence": 0.4,
-  "minActProbability": 0,
   "gateEnabled": true,
   "gateThreshold": 0.5,
 

@@ -8,7 +8,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// Decisions API (TypeSafe Jev / local Laya)
+// Decisions API (TypeSafe Jev)
 // ---------------------------------------------------------------------------
 
 export type Content = string | Record<string, unknown> | unknown[];
@@ -38,8 +38,6 @@ export interface ChoiceAnswer {
 	choice: string;
 	confidence?: number;
 	probabilities?: Record<string, number>;
-	/** Laya-only: `act_probability`, the model's own act/abstain signal. */
-	action?: Record<string, number>;
 }
 
 export interface ScoreAnswer {
@@ -189,8 +187,6 @@ export interface Hop {
 	latencyMs: number;
 	probabilities?: Record<string, number>;
 	optionCount: number;
-	/** Laya-only: the model's own act/abstain signal for this hop, when reported. */
-	actProbability?: number;
 }
 
 export type TraversalStatus =
@@ -246,7 +242,7 @@ export interface TraversalResult {
 	totalMs: number;
 	/** Why the traversal ended the way it did. */
 	reason: string;
-	/** Warnings the decisions service attached to its answers (host-laya's `warnings`). */
+	/** Warnings the decisions service attached to its answers. */
 	warnings?: string[];
 	/** True when the result was served from the local route cache. */
 	cached?: boolean;

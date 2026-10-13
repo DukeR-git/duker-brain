@@ -19,31 +19,3 @@ updates:
     schedule:
       interval: weekly
 
-  # host-laya pins exact versions in constraints.txt, resolved together with the
-  # torch XPU build. The Intel GPU runtime has to move as one unit with torch
-  # (see the header of constraints.txt), so it is ignored here and upgraded by
-  # hand. Everything else arrives as one grouped pull request, which still needs
-  # a smoke test on real hardware before merging.
-  - package-ecosystem: pip
-    directory: /host-laya
-    schedule:
-      interval: monthly
-    groups:
-      host-laya-python:
-        patterns: ["*"]
-    ignore:
-      - dependency-name: "torch*"
-      - dependency-name: "triton-xpu"
-      - dependency-name: "intel-*"
-      - dependency-name: "onemkl-*"
-      - dependency-name: "dpcpp-cpp-rt"
-      - dependency-name: "mkl"
-      - dependency-name: "tbb"
-      - dependency-name: "tcmlib"
-      - dependency-name: "umf"
-
-  # No docker entry on purpose. host-laya's only base image is ubuntu:24.04, the
-  # LTS the Intel GPU packages are built for, and its point releases ship under
-  # that same tag. Every tag Dependabot could propose is a different release
-  # (24.10, 26.04), and moving to one means re-resolving the torch XPU stack
-  # and testing on Arc hardware, so it is done by hand.

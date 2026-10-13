@@ -2,9 +2,10 @@
  * Semantic route cache & sub-millisecond memoization.
  *
  * Caches traversal results for prompts across turns and sessions.
- * Invalidation is automatic: cache entries carry a fingerprint of all
- * `_index.json` manifests in the vault. If any note or folder criteria
- * changes, the fingerprint changes, invalidating stale cache entries.
+ * Invalidation is automatic: cache entries carry a fingerprint of every
+ * manifest and note in the vault, so editing any of them (in Obsidian too)
+ * invalidates stale entries. Prompts are stored only as hashes: the cache sits
+ * in the vault, which may be pushed to a shared repository.
  */
 
 import { createHash } from "node:crypto";
@@ -17,10 +18,11 @@ import type { TraversalResult } from "./types.js";
 
 export const CACHE_FILE = ".brain.cache.json";
 export const DEFAULT_MAX_CACHE_ENTRIES = 500;
+/** 2: prompts no longer stored in clear; older files are dropped on load. */
+const CACHE_VERSION = 2;
 
 export interface CacheEntry {
 	queryHash: string;
-	normalizedPrompt: string;
 	fingerprint: string;
 	result: TraversalResult;
 	createdAt: number;
@@ -61,8 +63,8 @@ export function hashPrompt(normalized: string): string {
 }
 
 /**
- * Computes a fingerprint representing the state of all `_index.json` manifests in the vault.
- * Fast stat-only check: reads size and mtimeMs of every manifest.
+ * Computes a fingerprint representing the state of every manifest and note in the vault.
+ * Fast stat-only check: reads size and mtimeMs of each.
  */
 export function computeVaultFingerprint(vaultRoot: string): string {
 	const records: string[] = [];
@@ -88,7 +90,7 @@ export function computeVaultFingerprint(vaultRoot: string): string {
 			}
 			if (st.isDirectory()) {
 				scan(full);
-			} else if (name === MANIFEST_FILE) {
+			} else if (name === MANIFEST_FILE || name.endsWith(".md")) {
 				const rel = full.slice(vaultRoot.length).replace(/\\/g, "/");
 				records.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
 			}
@@ -118,11 +120,11 @@ export class RouteCache {
 	 * Looks up a cached traversal result for the given prompt in the vault.
 	 * Returns null on miss or when cache is invalid.
 	 */
-	get(prompt: string, vaultRoot: string): TraversalResult | null {
+	get(prompt: string, vaultRoot: string, scope = ""): TraversalResult | null {
 		const norm = normalizePrompt(prompt);
 		if (!norm) return null;
 
-		const qHash = hashPrompt(norm);
+		const qHash = hashPrompt(scope ? `${scope}\n${norm}` : norm);
 		const fp = this.getOrUpdateFingerprint(vaultRoot);
 
 		this.ensureLoaded(vaultRoot);
@@ -157,7 +159,7 @@ export class RouteCache {
 	 * Stores a successful traversal result in the cache.
 	 * Only caches stable outcomes ("leaf", "fallback", "skipped").
 	 */
-	set(prompt: string, vaultRoot: string, result: TraversalResult): void {
+	set(prompt: string, vaultRoot: string, result: TraversalResult, scope = ""): void {
 		if (
 			result.status !== "leaf" &&
 			result.status !== "composite" &&
@@ -170,7 +172,7 @@ export class RouteCache {
 		const norm = normalizePrompt(prompt);
 		if (!norm) return;
 
-		const qHash = hashPrompt(norm);
+		const qHash = hashPrompt(scope ? `${scope}\n${norm}` : norm);
 		const fp = this.getOrUpdateFingerprint(vaultRoot);
 
 		this.ensureLoaded(vaultRoot);
@@ -186,7 +188,6 @@ export class RouteCache {
 
 		const entry: CacheEntry = {
 			queryHash: qHash,
-			normalizedPrompt: norm,
 			fingerprint: fp,
 			result: JSON.parse(JSON.stringify(result)),
 			createdAt: Date.now(),
@@ -211,7 +212,7 @@ export class RouteCache {
 			const diskPath = join(vaultRoot, CACHE_FILE);
 			try {
 				if (existsSync(diskPath)) {
-					writeFileAtomic(diskPath, JSON.stringify({ version: 1, fingerprint: "", entries: {} }, null, 2));
+					writeFileAtomic(diskPath, JSON.stringify({ version: CACHE_VERSION, fingerprint: "", entries: {} }, null, 2));
 				}
 			} catch {
 				// Non-fatal if disk clear fails
@@ -252,7 +253,7 @@ export class RouteCache {
 		try {
 			const content = readFileSync(diskPath, "utf8");
 			const parsed = JSON.parse(content) as SerializedCache;
-			if (parsed.version !== 1 || !parsed.entries) return;
+			if (parsed.version !== CACHE_VERSION || !parsed.entries) return;
 
 			const fp = this.getOrUpdateFingerprint(vaultRoot);
 			for (const [key, entry] of Object.entries(parsed.entries)) {
@@ -273,7 +274,7 @@ export class RouteCache {
 		}
 
 		const data: SerializedCache = {
-			version: 1,
+			version: CACHE_VERSION,
 			fingerprint: this.currentFingerprint ?? "",
 			entries: entriesObj,
 		};

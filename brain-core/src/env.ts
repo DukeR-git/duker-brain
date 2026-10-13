@@ -17,9 +17,9 @@ import { dirname, join, resolve } from "node:path";
 
 /** The hosted TypeSafe Jev API. The default backend: nothing to install, just a key. */
 export const JEV_URL = "https://api.typesafe.ai";
-/** Jev's evaluation endpoint. host-laya serves it too, so one default fits both. */
+/** Jev's evaluation endpoint. */
 export const DEFAULT_DECISIONS_PATH = "/v1/systemone";
-/** Required by Jev, ignored by a local Laya host. */
+/** Sent with every request; Jev requires it. */
 export const DEFAULT_MODEL = "jev-latest";
 /** Read when `BRAIN_DECISIONS_API_KEY` is unset - the name TypeSafe's own docs use. */
 export const TYPESAFE_KEY_ENV = "TYPESAFE_API_KEY";
@@ -152,40 +152,7 @@ export function envBoolean(env: NodeJS.ProcessEnv, key: string, fallback: boolea
 	return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
 }
 
-const PRIVATE_V4 = [
-	/^127\./, // loopback
-	/^10\./,
-	/^192\.168\./,
-	/^172\.(1[6-9]|2\d|3[01])\./,
-	/^169\.254\./, // link-local
-	/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // CGNAT, e.g. Tailscale
-];
-
-/**
- * Is this decisions URL on this machine or the local network? Those get the
- * tight timeout: a LAN hop adds a millisecond, not the hundreds a remote API does.
- */
-export function isLocalUrl(url: string): boolean {
-	let hostname: string;
-	try {
-		// IPv6 hosts come back bracketed: `http://[::1]:8081` has hostname `[::1]`.
-		hostname = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
-	} catch {
-		return false;
-	}
-	if (hostname === "localhost" || hostname.endsWith(".localhost")) return true;
-	if (hostname.endsWith(".local") || hostname.endsWith(".lan") || hostname.endsWith(".internal")) return true;
-	if (!hostname.includes(".") && !hostname.includes(":")) return true; // a bare LAN name like `gpubox`
-	if (hostname === "::1" || /^f[cd][0-9a-f]{2}:/.test(hostname) || /^fe80:/.test(hostname)) return true;
-	return PRIVATE_V4.some((pattern) => pattern.test(hostname));
-}
-
-/** The default per-request budget: tight on the local network, generous against remote Jev. */
-export function defaultTimeout(url: string): number {
-	return isLocalUrl(url) ? 500 : 2000;
-}
-
-/** The default budget for a whole route, every hop and retry included. */
-export function defaultRouteBudget(url: string): number {
-	return isLocalUrl(url) ? 1000 : 3000;
-}
+/** Per-request timeout: past this the agent proceeds without a guide rather than stall. */
+export const DEFAULT_TIMEOUT_MS = 2000;
+/** Budget for a whole route, every hop and retry included. */
+export const DEFAULT_ROUTE_BUDGET_MS = 3000;

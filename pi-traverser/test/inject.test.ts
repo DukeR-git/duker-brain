@@ -75,15 +75,8 @@ describe("formatTrace", () => {
 		assert.match(trace, /Backend\/asyncpg_pooling\.md/);
 	});
 
-	it("shows Laya's act probability and the service's warnings", () => {
-		const base = result();
-		const trace = formatTrace(
-			result({
-				hops: [{ ...base.hops[0], actProbability: 0.81 }],
-				warnings: ["question offers 16 options"],
-			}),
-		);
-		assert.match(trace, /backend\(0\.95, act 0\.81, 12ms\)/);
+	it("shows the service's warnings", () => {
+		const trace = formatTrace(result({ warnings: ["question offers 16 options"] }));
 		assert.match(trace, /service warnings: question offers 16 options/);
 	});
 });

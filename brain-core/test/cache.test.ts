@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { join } from "node:path";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 import {
 	RouteCache,
@@ -46,6 +46,28 @@ describe("route cache", () => {
 		assert.ok(fp && fp.length === 16);
 		// Same vault yields same fingerprint
 		assert.equal(computeVaultFingerprint(FIXTURE), fp);
+	});
+
+	it("changes the fingerprint when a note's body is edited", () => {
+		const dir = scratch();
+		writeFileSync(join(dir, "note.md"), "old text");
+		const before = computeVaultFingerprint(dir);
+		writeFileSync(join(dir, "note.md"), "new, longer text");
+		assert.notEqual(computeVaultFingerprint(dir), before);
+	});
+
+	it("keeps routes made under different settings apart", () => {
+		const dir = scratch();
+		const cache = new RouteCache(10);
+		cache.set("pool sizing", dir, dummyResult(), "settings-a");
+		assert.equal(cache.get("pool sizing", dir, "settings-b"), null);
+		assert.ok(cache.get("pool sizing", dir, "settings-a"));
+	});
+
+	it("stores no prompt text on disk", () => {
+		const dir = scratch();
+		new RouteCache(10).set("my hunter2 database password", dir, dummyResult());
+		assert.doesNotMatch(readFileSync(join(dir, ".brain.cache.json"), "utf8"), /hunter2/);
 	});
 
 	it("stores and retrieves cached routes", () => {

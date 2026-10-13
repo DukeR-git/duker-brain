@@ -49,21 +49,3 @@ jobs:
           out=$(echo '{"session_id":"ci","prompt":"How do I size an asyncpg pool?"}' | BRAIN_VAULT_ROOT= XDG_CONFIG_HOME="$RUNNER_TEMP/xdg" CLAUDE_PLUGIN_DATA="$RUNNER_TEMP/plugin-data" node dist/brain-hook.mjs prompt)
           test -z "$out"
 
-  host-laya:
-    name: host-laya (API layer, no GPU)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: host-laya
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: host-laya/requirements-test.txt
-      - run: pip install -r requirements-test.txt
-      - run: pytest -q
-      - run: bash -n scripts/host_preflight.sh
-      - name: Compose file is valid
-        run: docker compose config --quiet

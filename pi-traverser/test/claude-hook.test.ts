@@ -194,7 +194,7 @@ describe("the SessionStart hook", () => {
 		assert.match(hook.sessionStart("startup")?.systemMessage ?? "", /API key/);
 	});
 
-	it("says nothing when routing is set up", () => {
+	it("says nothing when routing is set up, including a self-hosted service without a key", () => {
 		const hook = setup();
 		assert.equal(hook.sessionStart("startup"), undefined);
 		assert.equal(hook.sessionStart("resume"), undefined);

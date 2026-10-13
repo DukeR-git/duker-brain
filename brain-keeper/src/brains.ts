@@ -316,8 +316,8 @@ export function addBrain(options: AddOptions): AddResult {
 		if (folder === ".") throw new Error("a brain goes into its own folder, not the vault root");
 		const target = resolveInVault(options.vaultRoot, folder, "folder");
 
-		const record = readSources(options.vaultRoot);
-		if (record.brains[folder]) throw new Error(`'${folder}' already holds ${record.brains[folder].source}; run \`brain-keeper update ${folder}\` to update it`);
+		const existing = readSources(options.vaultRoot).brains[folder];
+		if (existing) throw new Error(`'${folder}' already holds ${existing.source}; run \`brain-keeper update ${folder}\` to update it`);
 		if (existsSync(target) && readdirSync(target).length > 0) {
 			throw new Error(`the folder '${folder}' already exists in the vault; choose another with --as <folder>`);
 		}
@@ -342,6 +342,9 @@ export function addBrain(options: AddOptions): AddResult {
 		if (result.dryRun) return result;
 
 		result.compiled = withVaultLock(options.vaultRoot, () => {
+			// Read under the lock: another writer may have changed the record since.
+			const record = readSources(options.vaultRoot);
+			if (record.brains[folder]) throw new Error(`'${folder}' was added by another process meanwhile`);
 			const hashes: Record<string, string> = {};
 			for (const file of notes) {
 				const content = readFileSync(join(fetched.dir, file), "utf8");
@@ -473,22 +476,36 @@ export interface UpdateResult {
 }
 
 export function updateBrains(options: UpdateOptions): UpdateResult {
-	const record = readSources(options.vaultRoot);
-	const folders = options.folder ? [normaliseVaultPath(options.folder)] : Object.keys(record.brains).sort();
-	if (options.folder && !record.brains[folders[0]]) {
-		throw new Error(`'${folders[0]}' is not a brain added with brain-keeper add. Added: ${Object.keys(record.brains).join(", ") || "none"}`);
+	const installedBrains = readSources(options.vaultRoot).brains;
+	const folders = options.folder ? [normaliseVaultPath(options.folder)] : Object.keys(installedBrains).sort();
+	if (options.folder && !installedBrains[folders[0]]) {
+		throw new Error(`'${folders[0]}' is not a brain added with brain-keeper add. Added: ${Object.keys(installedBrains).join(", ") || "none"}`);
 	}
 	const dryRun = options.dryRun === true;
 	const updates: BrainUpdate[] = [];
 
+	// Clone before taking the vault lock: a clone can outlast the lock's stale
+	// timeout, after which another writer would take the lock over.
+	const sources = new Map<string, Fetched | Error>();
+	for (const folder of folders) {
+		try {
+			sources.set(folder, (options.fetch ?? fetchSource)(parseSource(installedBrains[folder].source)));
+		} catch (error) {
+			sources.set(folder, error as Error);
+		}
+	}
+
 	const run = () => {
+		// Read under the lock: another writer may have changed the record while we cloned.
+		const record = readSources(options.vaultRoot);
 		for (const folder of folders) {
-			const installed = record.brains[folder];
+			const installed = record.brains[folder] ?? installedBrains[folder];
 			const update: BrainUpdate = { folder, source: installed.source, from: installed.commit ?? installed.version, added: [], updated: [], kept: [], removedUpstream: [], evals: 0 };
 			updates.push(update);
-			let fetched: Fetched | undefined;
+			const fetched = sources.get(folder)!;
 			try {
-				fetched = (options.fetch ?? fetchSource)(parseSource(installed.source));
+				if (!record.brains[folder]) throw new Error(`'${folder}' was removed by another process meanwhile`);
+				if (fetched instanceof Error) throw fetched;
 				update.to = fetched.commit ?? fetched.meta.version;
 				const target = resolveInVault(options.vaultRoot, folder, "folder");
 				const upstream = new Set(brainFiles(fetched.dir).filter((file) => file !== EVALS_FILE));
@@ -532,8 +549,6 @@ export function updateBrains(options: UpdateOptions): UpdateResult {
 				}
 			} catch (error) {
 				update.error = (error as Error).message;
-			} finally {
-				fetched?.cleanup();
 			}
 		}
 		if (dryRun) return undefined;
@@ -541,8 +556,12 @@ export function updateBrains(options: UpdateOptions): UpdateResult {
 		return compileVault(options.vaultRoot);
 	};
 
-	const compiled = dryRun ? run() : withVaultLock(options.vaultRoot, run);
-	return { updates, compiled, dryRun };
+	try {
+		const compiled = dryRun ? run() : withVaultLock(options.vaultRoot, run);
+		return { updates, compiled, dryRun };
+	} finally {
+		for (const fetched of sources.values()) if (!(fetched instanceof Error)) fetched.cleanup();
+	}
 }
 
 // ---------------------------------------------------------------------------

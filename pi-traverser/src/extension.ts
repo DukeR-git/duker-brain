@@ -29,7 +29,8 @@ import { compileVault, scanVault } from "../../brain-core/src/vault.js";
 import { loadEvalSuite, renderEvalReport, runEvalSuite } from "../../brain-core/src/eval.js";
 import { describeConfig, loadConfig, type BrainConfig } from "./config.js";
 import { CUSTOM_TYPE, formatStatus, formatTrace } from "./inject.js";
-import { isTrivialFollowUp, planInjection, type InjectedGuide } from "./session.js";
+import { isTrivialFollowUp } from "../../brain-core/src/traverser.js";
+import { planInjection, type InjectedGuide } from "./session.js";
 
 export { isTrivialFollowUp };
 
@@ -100,14 +101,8 @@ export interface ExtensionOptions {
 /** First re-probe after the service goes down; doubles up to the ceiling. */
 const FIRST_COOLDOWN_MS = 15_000;
 const MAX_COOLDOWN_MS = 5 * 60_000;
-/** A host that says it is still loading its checkpoint is worth asking again soon. */
-const LOADING_COOLDOWN_MS = 5_000;
 /** Consecutive decision failures on the hot path before the service is treated as down. */
 const FAILURES_BEFORE_DOWN = 2;
-
-/** Identical prompts within this window reuse the earlier route (a regenerate, a retry). */
-const ROUTE_CACHE_MS = 2 * 60_000;
-const ROUTE_CACHE_SIZE = 32;
 
 const SUBCOMMANDS = ["status", "trace", "reload", "rebuild", "stats", "eval", "on", "off", "config", "help"];
 
@@ -131,10 +126,10 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 	let consecutiveFailures = 0;
 	let probing: Promise<void> | undefined;
 
-	// Session memory: which guides are already in the conversation, and recent routes.
+	// Session memory: which guides are already in the conversation. Repeated
+	// prompts are served by the traverser's route cache, which sees vault edits.
 	let turn = 0;
 	const injected = new Map<string, InjectedGuide>();
-	const routeCache = new Map<string, { at: number; result: TraversalResult }>();
 
 	const notify = (text: string, level = "info") => {
 		if (ui?.hasUI) ui.ui.notify(text, level);
@@ -148,7 +143,6 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 	const resetSession = () => {
 		turn = 0;
 		injected.clear();
-		routeCache.clear();
 	};
 
 	/** (Re)load config and rebuild the stack. Never throws: a bad config disables routing and says why. */
@@ -171,12 +165,12 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 		resetSession();
 	};
 
-	const markDown = (why: string, loading = false) => {
+	const markDown = (why: string) => {
 		const wasDown = health === "down";
 		health = "down";
-		const wait = loading ? LOADING_COOLDOWN_MS : cooldownMs;
+		const wait = cooldownMs;
 		nextProbeAt = now() + wait;
-		if (!loading) cooldownMs = Math.min(cooldownMs * 2, MAX_COOLDOWN_MS);
+		cooldownMs = Math.min(cooldownMs * 2, MAX_COOLDOWN_MS);
 		if (!wasDown) {
 			logger.warn(`${why}; routing is paused and will retry in ${Math.round(wait / 1000)}s`);
 			setStatus("brain: service down");
@@ -192,12 +186,12 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 			health = "up";
 			cooldownMs = FIRST_COOLDOWN_MS;
 			consecutiveFailures = 0;
-			const where = result.backend === "laya" ? `${result.model ?? "laya"} on ${result.device ?? "?"}` : result.model;
+			const where = result.model;
 			if (wasDown) logger.warn(`decisions API is back (${where}); routing resumed`);
 			else logger.info(`decisions API ready (${where})`);
 			setStatus(`brain: ready (${where})`);
 		} else {
-			markDown(`decisions API not usable at ${state.client.endpoint}: ${result.error}`, result.loading === true);
+			markDown(`decisions API not usable at ${state.client.endpoint}: ${result.error}`);
 		}
 	};
 
@@ -261,26 +255,17 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 			return undefined;
 		}
 
-		const cached = routeCache.get(key);
 		let result: TraversalResult;
-		if (cached && now() - cached.at < ROUTE_CACHE_MS) {
-			result = cached.result;
-		} else {
-			try {
-				result = await state.traverser.route(event.prompt);
-			} catch (error) {
-				// The traverser is written not to throw; if it ever does, the turn still
-				// proceeds without injected context.
-				logger.error(`traversal threw: ${(error as Error).message}`);
-				return undefined;
-			}
-			if (result.status !== "error") {
-				routeCache.set(key, { at: now(), result });
-				if (routeCache.size > ROUTE_CACHE_SIZE) routeCache.delete(routeCache.keys().next().value!);
-			}
-			const logPath = resolveRouteLogPath(state.config.routeLog, env);
-			if (logPath) appendRouteLog(logPath, toRouteRecord(event.prompt, result));
+		try {
+			result = await state.traverser.route(event.prompt);
+		} catch (error) {
+			// The traverser is written not to throw; if it ever does, the turn still
+			// proceeds without injected context.
+			logger.error(`traversal threw: ${(error as Error).message}`);
+			return undefined;
 		}
+		const logPath = resolveRouteLogPath(state.config.routeLog, env);
+		if (logPath) appendRouteLog(logPath, toRouteRecord(event.prompt, result));
 
 		state.lastResult = result;
 		logger.debug(formatTrace(result));
@@ -381,7 +366,6 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 					try {
 						const result = withVaultLock(config.vaultRoot, () => compileVault(config.vaultRoot, { maxHops: config.maxHops }));
 						state!.traverser.reload();
-						routeCache.clear();
 						const written = result.files.filter((file) => file.status === "written").length;
 						const errors = result.issues.filter((issue) => issue.severity === "error").length;
 						ctx.ui.notify(
@@ -496,6 +480,6 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 	function serviceState(): string {
 		if (!lastHealth) return "(not checked)";
 		if (!lastHealth.ok) return lastHealth.error ?? "down";
-		return `up (${lastHealth.backend}: ${lastHealth.model ?? "?"} on ${lastHealth.device ?? "?"})`;
+		return `up (${lastHealth.model ?? "?"})`;
 	}
 }

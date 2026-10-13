@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { describeConfig, loadConfig } from "../src/config.js";
-import { applyPluginOptions, isLocalUrl } from "../src/env.js";
+import { applyPluginOptions } from "../src/env.js";
 import { Logger } from "../src/logger.js";
 import { isolatedEnv, tempDir } from "./helpers.js";
 
@@ -89,14 +89,10 @@ describe("sources", () => {
 		assert.match(described, /max hops {5}3 {3}\[.*brain-traverse\.config\.json\]/);
 	});
 
-	it("derives the per-request timeout and the route budget from the URL", () => {
-		const remote = loadConfig({ skipFile: true, env: {} });
-		assert.equal(remote.timeoutMs, 2000);
-		assert.equal(remote.routeBudgetMs, 3000);
-
-		const lan = loadConfig({ skipFile: true, env: { BRAIN_DECISIONS_URL: "http://192.168.1.20:8081" } });
-		assert.equal(lan.timeoutMs, 500);
-		assert.equal(lan.routeBudgetMs, 1000);
+	it("defaults the per-request timeout and the route budget", () => {
+		const config = loadConfig({ skipFile: true, env: {} });
+		assert.equal(config.timeoutMs, 2000);
+		assert.equal(config.routeBudgetMs, 3000);
 	});
 });
 
@@ -105,11 +101,11 @@ describe("applyPluginOptions", () => {
 		const env = applyPluginOptions({
 			CLAUDE_PLUGIN_OPTION_VAULT_ROOT: "/vaults/brain",
 			CLAUDE_PLUGIN_OPTION_API_KEY: "sk-plugin",
-			CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "http://laya:8081",
+			CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "http://my-server:8081",
 		});
 		assert.equal(env.BRAIN_VAULT_ROOT, "/vaults/brain");
 		assert.equal(env.BRAIN_DECISIONS_API_KEY, "sk-plugin");
-		assert.equal(env.BRAIN_DECISIONS_URL, "http://laya:8081");
+		assert.equal(env.BRAIN_DECISIONS_URL, "http://my-server:8081");
 	});
 
 	it("leaves a BRAIN_* variable the user set alone", () => {
@@ -130,31 +126,6 @@ describe("applyPluginOptions", () => {
 		const config = loadConfig({ skipFile: true, env: applyPluginOptions({ CLAUDE_PLUGIN_OPTION_VAULT_ROOT: tempDir() }) });
 		assert.ok(config.vaultRoot);
 		assert.equal(config.sources.vaultRoot, "env BRAIN_VAULT_ROOT");
-	});
-});
-
-describe("isLocalUrl", () => {
-	it("counts loopback, private networks and LAN names as local", () => {
-		for (const url of [
-			"http://localhost:8081",
-			"http://127.0.0.1:8081",
-			"http://[::1]:8081",
-			"http://192.168.1.20:8081",
-			"http://10.0.0.5",
-			"http://172.20.1.1",
-			"http://100.101.1.1",
-			"http://gpubox:8081",
-			"http://gpubox.local:8081",
-			"http://[fd12:3456::1]:8081",
-		]) {
-			assert.equal(isLocalUrl(url), true, url);
-		}
-	});
-
-	it("counts public hosts as remote", () => {
-		for (const url of ["https://api.typesafe.ai", "http://172.32.0.1", "http://8.8.8.8", "not a url"]) {
-			assert.equal(isLocalUrl(url), false, url);
-		}
 	});
 });
 

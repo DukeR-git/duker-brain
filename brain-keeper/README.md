@@ -5,10 +5,8 @@ the judgement-heavy parts. One implementation, two front doors: native tools in
 **Pi** (installed by `pi install`), and an MCP server for **Claude Code, Codex**
 and any other MCP client.
 
-This is Part 3, reshaped from the plan's "vault compiler + Obsidian workflow"
-into something you drive from inside an agent. The compiler is still here; it
-just runs automatically after every write instead of being a build step you
-remember to run.
+The vault compiler runs automatically after every write, instead of being a
+build step you remember to run.
 
 ```
 agent ──tools / MCP──> brain-keeper ──> Obsidian vault (.md + _about.md)
@@ -99,8 +97,8 @@ args = ["/path/to/duker-brain/brain-keeper/bin/brain-keeper.mjs", "serve"]
 
 To use a vault other than the one `init` saved, add
 `"env": { "BRAIN_VAULT_ROOT": "/path/to/vault" }`. `brain_check_routing` also
-needs `TYPESAFE_API_KEY` in the server's environment when you route through Jev
-(or `BRAIN_DECISIONS_API_KEY` for a Laya host started with `LAYA_API_KEY`).
+needs `TYPESAFE_API_KEY` (or `BRAIN_DECISIONS_API_KEY`) in the server's environment
+when you route through Jev; a self-hosted service needs a key only if it checks one.
 
 The server reads its config on the first tool call, and again while no vault is
 configured, so running `brain-keeper init` after the harness started it just
@@ -275,7 +273,7 @@ keeper itself cares about:
 |---|---|---|
 | `BRAIN_VAULT_ROOT` | — | Vault root. Required; `init` saves it for you. |
 | `BRAIN_DECISIONS_URL` | `https://api.typesafe.ai` | Only used by `brain_check_routing`. |
-| `TYPESAFE_API_KEY` / `BRAIN_DECISIONS_API_KEY` | — | Needed by `brain_check_routing` against Jev, or a keyed Laya host. |
+| `TYPESAFE_API_KEY` / `BRAIN_DECISIONS_API_KEY` | — | Needed by `brain_check_routing` against Jev. |
 | `BRAIN_MAX_HOPS` | `4` | Also used by the doctor's `too-deep` check. |
 | `BRAIN_LOG_LEVEL` | `info` | Diagnostics go to stderr — stdout is the JSON-RPC stream. |
 
@@ -320,7 +318,7 @@ warning names `brain_split_branch` as the fix.
 ## 9. Tests
 
 ```bash
-npm test        # 82 tests, no GPU and no network
+npm test        # 110 tests, no network
 npm run typecheck
 ```
 
@@ -359,20 +357,7 @@ brain-keeper/
 └── test/
 ```
 
-## 11. Where this deviates from the plan
+## 11. Related
 
-| Plan says | What was built | Why |
-|---|---|---|
-| A standalone `compile_brain.py` you run after editing | The compiler runs after every write, and `brain_rebuild` covers hand edits | A build step you have to remember is a build step you forget; a stale manifest breaks routing silently |
-| Obsidian Templater scaffolds frontmatter | `brain_add_note` writes it | The agent is already the thing adding notes |
-| A file-watcher daemon | `brain-keeper watch`, optional | Every tool write recompiles anyway; the watcher is for editing by hand in Obsidian |
-| MCP for every harness | Native tools in Pi, MCP elsewhere | Pi has no built-in MCP client; registering the same definitions directly makes `pi install` the whole setup |
-| Folder metadata in "an optional folder-note or `_about.md`" | `_about.md`, required | "Optional" means the router gets only a folder name to discriminate on |
-| Validation raises a blocking error over 15 children | `doctor` errors, `add_note` warns and points at `split_branch` | Blocking a capture mid-session is the wrong moment to enforce structure |
-| — | `brain_check_routing` | Not in the plan, and the most useful tool here: it closes the loop between editing criteria and knowing whether it worked |
-
-## 12. Related
-
-- [../host-laya](../host-laya) — optional self-hosted decisions service (Part 1)
-- [../pi-traverser](../pi-traverser) — the router that reads what this writes (Part 2)
+- [../pi-traverser](../pi-traverser) — the router that reads what this writes
 - [../brain-core](../brain-core) — the shared vault model both depend on

@@ -1,12 +1,10 @@
 /**
  * HTTP client for the decisions API.
  *
- * Works unchanged against the hosted TypeSafe Jev API (`https://api.typesafe.ai`
- * + a bearer token) and a self-hosted Laya server such as ../host-laya, because
- * both speak the same request/response shape on `POST /v1/systemone`.
+ * Speaks the hosted TypeSafe Jev API: `POST /v1/systemone` with a bearer token.
  *
  * The contract with the caller is that this never throws for a routing failure:
- * a timeout, a 503 while the checkpoint loads, or a malformed body all come back
+ * a timeout, a 5xx, or a malformed body all come back
  * as `{ ok: false }`. An agent turn must not die because a side-car is down.
  */
 
@@ -18,7 +16,7 @@ export interface DecisionsClientOptions {
 	baseUrl: string;
 	path: string;
 	apiKey?: string;
-	/** Sent as the request's `model`. Required by Jev; a Laya host ignores it. */
+	/** Sent as the request's `model`. */
 	model?: string;
 	timeoutMs: number;
 	retries: number;
@@ -36,20 +34,13 @@ export type DecisionOutcome =
 	| { ok: true; answers: Record<string, Answer>; latencyMs: number; serverMs?: number; warnings?: string[] }
 	| { ok: false; error: string; latencyMs: number };
 
-/** What `health()` found. `backend` says which kind of server answered. */
+/** What `health()` found. */
 export interface ServiceHealth {
 	ok: boolean;
-	backend: "laya" | "jev" | "unknown";
-	/** The model that will answer: Laya's served name, or the configured Jev model. */
+	/** The configured Jev model. */
 	model?: string;
-	/** Where inference runs: Laya's active device, or "remote". */
-	device?: string;
 	/** Why `ok` is false, phrased so the user knows what to fix. */
 	error?: string;
-	/** True while a Laya host is still loading its checkpoint: worth probing again soon. */
-	loading?: boolean;
-	/** The raw body of whichever probe answered. */
-	detail?: Record<string, unknown>;
 }
 
 /** Longest back-off this client will sleep before a retry, whatever `Retry-After` asks for. */
@@ -83,11 +74,11 @@ export class DecisionsClient {
 		return this.url;
 	}
 
-	private get model(): string {
+	get model(): string {
 		return this.options.model ?? DEFAULT_MODEL;
 	}
 
-	/** Ask one or more typed questions. Laya answers all of them in one forward pass. */
+	/** Ask one or more typed questions; they are answered together in one request. */
 	async ask(state: string, questions: Record<string, Question>, askOptions: AskOptions = {}): Promise<DecisionOutcome> {
 		const started = performance.now();
 		const deadline = askOptions.deadline ?? Infinity;
@@ -131,8 +122,6 @@ export class DecisionsClient {
 			const response = await doFetch(this.url, {
 				method: "POST",
 				headers: this.headers({ "content-type": "application/json" }),
-				// `model` is ignored by a Laya host and required by Jev; sending it
-				// keeps one payload valid against both.
 				body: JSON.stringify({ model: this.model, state, questions }),
 				signal: controller.signal,
 			});
@@ -142,7 +131,7 @@ export class DecisionsClient {
 				return {
 					ok: false,
 					error: `HTTP ${response.status}: ${body.slice(0, 200)}`,
-					// 503 is the host still loading its checkpoint; 429/5xx are worth one retry.
+					// 429 and 5xx are worth one retry.
 					retryable: response.status >= 500 || response.status === 429,
 					retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
 				};
@@ -178,7 +167,7 @@ export class DecisionsClient {
 		}
 	}
 
-	/** Single-choice convenience wrapper, as `pickChoice` in the plan. */
+	/** Single-choice convenience wrapper. */
 	async pickChoice(
 		state: string,
 		instructions: string,
@@ -205,82 +194,19 @@ export class DecisionsClient {
 		};
 	}
 
-	/**
-	 * Is the service up, and can we use it?
-	 *
-	 * Tries `GET /healthz` first - a Laya host answers it with its device and
-	 * readiness - then `GET /v1/models`, which both Jev and host-laya serve and
-	 * which checks the API key. Never throws.
-	 */
+	/** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
 	async health(): Promise<ServiceHealth> {
-		const laya = await this.probe("/healthz", false);
-		if (laya.status === 200 && laya.body) {
-			const body = laya.body;
-			const model = body.served_model_name === undefined ? undefined : String(body.served_model_name);
-			const device = body.device_active === undefined ? undefined : String(body.device_active);
-			if (body.status === "failed") {
-				return {
-					ok: false,
-					backend: "laya",
-					model,
-					error: `the Laya host failed to load its checkpoint: ${String(body.error ?? "see its logs")}`,
-					detail: body,
-				};
-			}
-			if (body.ready === false || body.status === "loading") {
-				return {
-					ok: false,
-					backend: "laya",
-					model,
-					loading: true,
-					error: "the Laya host is still loading its checkpoint",
-					detail: body,
-				};
-			}
-
-			// A host started with LAYA_API_KEY checks the key on /v1/*; say so now
-			// rather than failing every prompt with a 401.
-			const models = await this.probe("/v1/models", true);
-			if (models.status === 401 || models.status === 403) {
-				return {
-					ok: false,
-					backend: "laya",
-					model,
-					device,
-					error: this.options.apiKey
-						? `the Laya host rejected the API key (HTTP ${models.status})`
-						: "the Laya host requires an API key: set BRAIN_DECISIONS_API_KEY to its LAYA_API_KEY",
-					detail: body,
-				};
-			}
-			return { ok: true, backend: "laya", model, device, detail: body };
-		}
-		if (laya.status === 0) return { ok: false, backend: "unknown", error: laya.error };
-
-		const models = await this.probe("/v1/models", true);
-		if (models.status === 200) {
-			return {
-				ok: true,
-				backend: "jev",
-				model: this.model,
-				device: "remote",
-				detail: models.body,
-			};
-		}
+		const models = await this.probe("/v1/models");
+		if (models.status === 200) return { ok: true, model: this.model };
 		if (models.status === 401 || models.status === 403) {
 			return {
 				ok: false,
-				backend: "jev",
 				error: this.options.apiKey
 					? `API key rejected (HTTP ${models.status})`
 					: "no API key: set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY)",
 			};
 		}
-		return {
-			ok: false,
-			backend: "unknown",
-			error: models.status === 0 ? models.error : `no decisions API here (HTTP ${models.status})`,
-		};
+		return { ok: false, error: models.status === 0 ? models.error : `no decisions API here (HTTP ${models.status})` };
 	}
 
 	private headers(extra: Record<string, string> = {}): Record<string, string> {
@@ -290,21 +216,18 @@ export class DecisionsClient {
 	}
 
 	/** One GET. `status` 0 means the server never answered. */
-	private async probe(
-		path: string,
-		authenticated: boolean,
-	): Promise<{ status: number; body?: Record<string, unknown>; error?: string }> {
+	private async probe(path: string): Promise<{ status: number; error?: string }> {
 		const doFetch = this.options.fetchImpl ?? fetch;
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
 		try {
 			const base = this.options.baseUrl.replace(/\/+$/, "");
 			const response = await doFetch(`${base}${path}`, {
-				headers: authenticated ? this.headers() : {},
+				headers: this.headers(),
 				signal: controller.signal,
 			});
-			const body = (await response.json().catch(() => undefined)) as Record<string, unknown> | undefined;
-			return { status: response.status, body: body && typeof body === "object" ? body : undefined };
+			await response.text().catch(() => "");
+			return { status: response.status };
 		} catch (error) {
 			const err = error as Error;
 			return {

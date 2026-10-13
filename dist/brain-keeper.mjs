@@ -111,7 +111,7 @@ function resolveUserPath(path, base) {
   }
   return resolve(base, path);
 }
-function readConfigFiles(cwd, env, label, warnings = []) {
+function readConfigFiles(cwd, env, label2, warnings = []) {
   const explicit = env.BRAIN_CONFIG?.trim();
   const candidates = [userConfigPath(env), explicit ? resolve(cwd, explicit) : resolve(cwd, PROJECT_CONFIG_FILE)];
   if (explicit && !existsSync(candidates[1])) {
@@ -124,10 +124,10 @@ function readConfigFiles(cwd, env, label, warnings = []) {
     try {
       values = JSON.parse(readFileSync(path, "utf8"));
     } catch (error2) {
-      throw new Error(`${label}: could not parse ${path}: ${error2.message}`);
+      throw new Error(`${label2}: could not parse ${path}: ${error2.message}`);
     }
     if (typeof values !== "object" || values === null || Array.isArray(values)) {
-      throw new Error(`${label}: ${path} must contain a JSON object of settings`);
+      throw new Error(`${label2}: ${path} must contain a JSON object of settings`);
     }
     const record2 = values;
     if (typeof record2.vaultRoot === "string" && record2.vaultRoot.trim()) {
@@ -141,26 +141,7 @@ function envString(env, key, fallback) {
   const value = env[key];
   return value === void 0 || value.trim() === "" ? fallback : value.trim();
 }
-function isLocalUrl(url2) {
-  let hostname;
-  try {
-    hostname = new URL(url2).hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  } catch {
-    return false;
-  }
-  if (hostname === "localhost" || hostname.endsWith(".localhost")) return true;
-  if (hostname.endsWith(".local") || hostname.endsWith(".lan") || hostname.endsWith(".internal")) return true;
-  if (!hostname.includes(".") && !hostname.includes(":")) return true;
-  if (hostname === "::1" || /^f[cd][0-9a-f]{2}:/.test(hostname) || /^fe80:/.test(hostname)) return true;
-  return PRIVATE_V4.some((pattern) => pattern.test(hostname));
-}
-function defaultTimeout(url2) {
-  return isLocalUrl(url2) ? 500 : 2e3;
-}
-function defaultRouteBudget(url2) {
-  return isLocalUrl(url2) ? 1e3 : 3e3;
-}
-var JEV_URL, DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, TYPESAFE_KEY_ENV, PLUGIN_OPTIONS, PROJECT_CONFIG_FILE, PRIVATE_V4;
+var JEV_URL, DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, TYPESAFE_KEY_ENV, PLUGIN_OPTIONS, PROJECT_CONFIG_FILE, DEFAULT_TIMEOUT_MS, DEFAULT_ROUTE_BUDGET_MS;
 var init_env = __esm({
   "brain-core/src/env.ts"() {
     "use strict";
@@ -174,17 +155,8 @@ var init_env = __esm({
       CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "BRAIN_DECISIONS_URL"
     };
     PROJECT_CONFIG_FILE = "brain-traverse.config.json";
-    PRIVATE_V4 = [
-      /^127\./,
-      // loopback
-      /^10\./,
-      /^192\.168\./,
-      /^172\.(1[6-9]|2\d|3[01])\./,
-      /^169\.254\./,
-      // link-local
-      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./
-      // CGNAT, e.g. Tailscale
-    ];
+    DEFAULT_TIMEOUT_MS = 2e3;
+    DEFAULT_ROUTE_BUDGET_MS = 3e3;
   }
 });
 
@@ -1113,12 +1085,10 @@ function loadConfig(options = {}) {
   config2.vaultRoot = config2.vaultRoot.trim();
   if (config2.vaultRoot) config2.vaultRoot = resolveUserPath(config2.vaultRoot, cwd);
   if (!config2.timeoutMs) {
-    config2.timeoutMs = defaultTimeout(config2.decisionsUrl);
-    sources.timeoutMs = `derived from ${config2.decisionsUrl}`;
+    config2.timeoutMs = DEFAULT_TIMEOUT_MS;
   }
   if (!config2.routeBudgetMs) {
-    config2.routeBudgetMs = Math.max(defaultRouteBudget(config2.decisionsUrl), config2.timeoutMs);
-    sources.routeBudgetMs = `derived from ${config2.decisionsUrl}`;
+    config2.routeBudgetMs = Math.max(DEFAULT_ROUTE_BUDGET_MS, config2.timeoutMs);
   }
   return config2;
 }
@@ -1141,7 +1111,6 @@ var init_config = __esm({
       routeBudgetMs: { kind: "integer", env: "BRAIN_ROUTE_BUDGET_MS", min: 0 },
       maxHops: { kind: "integer", env: "BRAIN_MAX_HOPS", min: 1, max: 16 },
       minConfidence: { kind: "number", env: "BRAIN_MIN_CONFIDENCE", min: 0, max: 1 },
-      minActProbability: { kind: "number", env: "BRAIN_MIN_ACT_PROBABILITY", min: 0, max: 1 },
       gateEnabled: { kind: "boolean", env: "BRAIN_GATE_ENABLED" },
       gateThreshold: { kind: "number", env: "BRAIN_GATE_THRESHOLD", min: 0, max: 1 },
       fallbackDocument: { kind: "string", env: "BRAIN_FALLBACK_DOC" },
@@ -1169,7 +1138,6 @@ var init_config = __esm({
       routeBudgetMs: 0,
       maxHops: 4,
       minConfidence: 0.4,
-      minActProbability: 0,
       gateEnabled: true,
       gateThreshold: 0.5,
       fallbackDocument: "auto",
@@ -8301,7 +8269,7 @@ var init_decisions_client = __esm({
       get model() {
         return this.options.model ?? DEFAULT_MODEL;
       }
-      /** Ask one or more typed questions. Laya answers all of them in one forward pass. */
+      /** Ask one or more typed questions; they are answered together in one request. */
       async ask(state, questions, askOptions = {}) {
         const started = performance.now();
         const deadline = askOptions.deadline ?? Infinity;
@@ -8337,8 +8305,6 @@ var init_decisions_client = __esm({
           const response = await doFetch(this.url, {
             method: "POST",
             headers: this.headers({ "content-type": "application/json" }),
-            // `model` is ignored by a Laya host and required by Jev; sending it
-            // keeps one payload valid against both.
             body: JSON.stringify({ model: this.model, state, questions }),
             signal: controller.signal
           });
@@ -8347,7 +8313,7 @@ var init_decisions_client = __esm({
             return {
               ok: false,
               error: `HTTP ${response.status}: ${body.slice(0, 200)}`,
-              // 503 is the host still loading its checkpoint; 429/5xx are worth one retry.
+              // 429 and 5xx are worth one retry.
               retryable: response.status >= 500 || response.status === 429,
               retryAfterMs: parseRetryAfter(response.headers.get("retry-after"))
             };
@@ -8379,7 +8345,7 @@ var init_decisions_client = __esm({
           clearTimeout(timer);
         }
       }
-      /** Single-choice convenience wrapper, as `pickChoice` in the plan. */
+      /** Single-choice convenience wrapper. */
       async pickChoice(state, instructions, criteria) {
         const outcome = await this.ask(state, {
           route_selection: { type: "choice", instructions, criteria }
@@ -8397,74 +8363,17 @@ var init_decisions_client = __esm({
           latencyMs: outcome.latencyMs
         };
       }
-      /**
-       * Is the service up, and can we use it?
-       *
-       * Tries `GET /healthz` first - a Laya host answers it with its device and
-       * readiness - then `GET /v1/models`, which both Jev and host-laya serve and
-       * which checks the API key. Never throws.
-       */
+      /** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
       async health() {
-        const laya = await this.probe("/healthz", false);
-        if (laya.status === 200 && laya.body) {
-          const body = laya.body;
-          const model = body.served_model_name === void 0 ? void 0 : String(body.served_model_name);
-          const device = body.device_active === void 0 ? void 0 : String(body.device_active);
-          if (body.status === "failed") {
-            return {
-              ok: false,
-              backend: "laya",
-              model,
-              error: `the Laya host failed to load its checkpoint: ${String(body.error ?? "see its logs")}`,
-              detail: body
-            };
-          }
-          if (body.ready === false || body.status === "loading") {
-            return {
-              ok: false,
-              backend: "laya",
-              model,
-              loading: true,
-              error: "the Laya host is still loading its checkpoint",
-              detail: body
-            };
-          }
-          const models2 = await this.probe("/v1/models", true);
-          if (models2.status === 401 || models2.status === 403) {
-            return {
-              ok: false,
-              backend: "laya",
-              model,
-              device,
-              error: this.options.apiKey ? `the Laya host rejected the API key (HTTP ${models2.status})` : "the Laya host requires an API key: set BRAIN_DECISIONS_API_KEY to its LAYA_API_KEY",
-              detail: body
-            };
-          }
-          return { ok: true, backend: "laya", model, device, detail: body };
-        }
-        if (laya.status === 0) return { ok: false, backend: "unknown", error: laya.error };
-        const models = await this.probe("/v1/models", true);
-        if (models.status === 200) {
-          return {
-            ok: true,
-            backend: "jev",
-            model: this.model,
-            device: "remote",
-            detail: models.body
-          };
-        }
+        const models = await this.probe("/v1/models");
+        if (models.status === 200) return { ok: true, model: this.model };
         if (models.status === 401 || models.status === 403) {
           return {
             ok: false,
-            backend: "jev",
             error: this.options.apiKey ? `API key rejected (HTTP ${models.status})` : "no API key: set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY)"
           };
         }
-        return {
-          ok: false,
-          backend: "unknown",
-          error: models.status === 0 ? models.error : `no decisions API here (HTTP ${models.status})`
-        };
+        return { ok: false, error: models.status === 0 ? models.error : `no decisions API here (HTTP ${models.status})` };
       }
       headers(extra = {}) {
         const headers = { ...extra };
@@ -8472,18 +8381,18 @@ var init_decisions_client = __esm({
         return headers;
       }
       /** One GET. `status` 0 means the server never answered. */
-      async probe(path, authenticated) {
+      async probe(path) {
         const doFetch = this.options.fetchImpl ?? fetch;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
         try {
           const base = this.options.baseUrl.replace(/\/+$/, "");
           const response = await doFetch(`${base}${path}`, {
-            headers: authenticated ? this.headers() : {},
+            headers: this.headers(),
             signal: controller.signal
           });
-          const body = await response.json().catch(() => void 0);
-          return { status: response.status, body: body && typeof body === "object" ? body : void 0 };
+          await response.text().catch(() => "");
+          return { status: response.status };
         } catch (error2) {
           const err = error2;
           return {
@@ -8530,7 +8439,7 @@ function computeVaultFingerprint(vaultRoot) {
       }
       if (st.isDirectory()) {
         scan(full);
-      } else if (name === MANIFEST_FILE) {
+      } else if (name === MANIFEST_FILE || name.endsWith(".md")) {
         const rel = full.slice(vaultRoot.length).replace(/\\/g, "/");
         records.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
       }
@@ -8540,7 +8449,7 @@ function computeVaultFingerprint(vaultRoot) {
   records.sort();
   return createHash3("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
 }
-var CACHE_FILE, DEFAULT_MAX_CACHE_ENTRIES, RouteCache, defaultRouteCache;
+var CACHE_FILE, DEFAULT_MAX_CACHE_ENTRIES, CACHE_VERSION, RouteCache, defaultRouteCache;
 var init_cache = __esm({
   "brain-core/src/cache.ts"() {
     "use strict";
@@ -8548,6 +8457,7 @@ var init_cache = __esm({
     init_manifest();
     CACHE_FILE = ".brain.cache.json";
     DEFAULT_MAX_CACHE_ENTRIES = 500;
+    CACHE_VERSION = 2;
     RouteCache = class {
       constructor(maxEntries = DEFAULT_MAX_CACHE_ENTRIES) {
         this.maxEntries = maxEntries;
@@ -8564,10 +8474,11 @@ var init_cache = __esm({
        * Looks up a cached traversal result for the given prompt in the vault.
        * Returns null on miss or when cache is invalid.
        */
-      get(prompt, vaultRoot) {
+      get(prompt, vaultRoot, scope = "") {
         const norm = normalizePrompt(prompt);
         if (!norm) return null;
-        const qHash = hashPrompt(norm);
+        const qHash = hashPrompt(scope ? `${scope}
+${norm}` : norm);
         const fp = this.getOrUpdateFingerprint(vaultRoot);
         this.ensureLoaded(vaultRoot);
         const entry = this.memory.get(qHash);
@@ -8593,13 +8504,14 @@ var init_cache = __esm({
        * Stores a successful traversal result in the cache.
        * Only caches stable outcomes ("leaf", "fallback", "skipped").
        */
-      set(prompt, vaultRoot, result) {
+      set(prompt, vaultRoot, result, scope = "") {
         if (result.status !== "leaf" && result.status !== "composite" && result.status !== "fallback" && result.status !== "skipped") {
           return;
         }
         const norm = normalizePrompt(prompt);
         if (!norm) return;
-        const qHash = hashPrompt(norm);
+        const qHash = hashPrompt(scope ? `${scope}
+${norm}` : norm);
         const fp = this.getOrUpdateFingerprint(vaultRoot);
         this.ensureLoaded(vaultRoot);
         if (this.memory.size >= this.maxEntries && !this.memory.has(qHash)) {
@@ -8611,7 +8523,6 @@ var init_cache = __esm({
         }
         const entry = {
           queryHash: qHash,
-          normalizedPrompt: norm,
           fingerprint: fp,
           result: JSON.parse(JSON.stringify(result)),
           createdAt: Date.now(),
@@ -8633,7 +8544,7 @@ var init_cache = __esm({
           const diskPath = join6(vaultRoot, CACHE_FILE);
           try {
             if (existsSync6(diskPath)) {
-              writeFileAtomic(diskPath, JSON.stringify({ version: 1, fingerprint: "", entries: {} }, null, 2));
+              writeFileAtomic(diskPath, JSON.stringify({ version: CACHE_VERSION, fingerprint: "", entries: {} }, null, 2));
             }
           } catch {
           }
@@ -8667,7 +8578,7 @@ var init_cache = __esm({
         try {
           const content = readFileSync7(diskPath, "utf8");
           const parsed = JSON.parse(content);
-          if (parsed.version !== 1 || !parsed.entries) return;
+          if (parsed.version !== CACHE_VERSION || !parsed.entries) return;
           const fp = this.getOrUpdateFingerprint(vaultRoot);
           for (const [key, entry] of Object.entries(parsed.entries)) {
             if (entry && entry.fingerprint === fp) {
@@ -8684,7 +8595,7 @@ var init_cache = __esm({
           entriesObj[k] = v;
         }
         const data = {
-          version: 1,
+          version: CACHE_VERSION,
           fingerprint: this.currentFingerprint ?? "",
           entries: entriesObj
         };
@@ -8701,6 +8612,14 @@ var init_cache = __esm({
 // brain-core/src/traverser.ts
 import { readFileSync as readFileSync8 } from "node:fs";
 import { basename as basename4, resolve as resolve7 } from "node:path";
+function routeQuestion(manifest) {
+  const criteria = {};
+  for (const entry of manifest.entries) criteria[entry.id] = entry.criteria;
+  return { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria };
+}
+function label(entry) {
+  return entry.type === "leaf" ? basename4(entry.targetPath) : entry.id;
+}
 function isTrivialFollowUp(state) {
   if (state.length > 40) return false;
   const words = state.toLowerCase().split(/[\s,.!?;:]+/).filter(Boolean);
@@ -8791,7 +8710,7 @@ var init_traverser = __esm({
     ROUTE_INSTRUCTIONS = "Select the reference manual most relevant to the developer prompt.";
     GATE_INSTRUCTIONS = "Does answering this developer prompt require consulting a technical reference manual? Answer no for greetings, small talk, and simple questions answerable without documentation.";
     ACKNOWLEDGEMENT_WORDS = new Set(
-      "y yes yeah yep yup no nope ok okay k kk sure thanks thank you thx ty cheers continue go on ahead proceed carry keep going next done great nice cool perfect sounds looks good lgtm agreed do it ship please mate".split(" ")
+      "y yes yeah yep yup no nope ok okay k kk sure thanks thank you thx ty cheers continue go on ahead proceed carry keep going next done great nice cool perfect sounds looks good lgtm agree agreed do it ship please mate".split(" ")
     );
     BrainTraverser = class {
       constructor(config2, client, logger, cache) {
@@ -8800,12 +8719,30 @@ var init_traverser = __esm({
         this.logger = logger;
         this.manifests = new ManifestStore(config2.vaultRoot, config2.watchManifests);
         this.cache = cache ?? defaultRouteCache;
+        const c = config2;
+        this.cacheScope = JSON.stringify([
+          client.endpoint,
+          client.model,
+          c.maxHops,
+          c.minConfidence,
+          c.gateEnabled,
+          c.gateThreshold,
+          c.fallbackDocument,
+          c.maxDocumentChars,
+          c.maxPromptChars,
+          c.compositeEnabled,
+          c.compositeThreshold,
+          c.compositeMarginRatio,
+          c.maxCompositeDocuments
+        ]);
       }
       config;
       client;
       logger;
       manifests;
       cache;
+      /** Cached routes are only valid for the settings that produced them; Pi and the Claude Code hook differ. */
+      cacheScope;
       /** Drop cached manifests and route cache; used by the `/brain reload` command. */
       reload() {
         this.manifests.clear();
@@ -8817,7 +8754,6 @@ var init_traverser = __esm({
         const hops = [];
         const segments = ["Root"];
         const warnings = [];
-        const visited = [];
         const finish2 = (status, reason, extra = {}) => {
           const docs = extra.documents ?? (extra.document ? [extra.document] : void 0);
           const primaryDoc = extra.document ?? (docs && docs.length > 0 ? docs[0] : void 0);
@@ -8834,7 +8770,7 @@ var init_traverser = __esm({
             ...docs ? { documents: docs } : {}
           };
           if (this.config.useCache === true && (status === "leaf" || status === "composite" || status === "fallback" || status === "skipped")) {
-            this.cache.set(prompt, this.config.vaultRoot, res);
+            this.cache.set(prompt, this.config.vaultRoot, res, this.cacheScope);
           }
           return res;
         };
@@ -8843,7 +8779,7 @@ var init_traverser = __esm({
         }
         if (!this.config.vaultRoot) return finish2("no-index", "vaultRoot is not configured");
         if (this.config.useCache === true) {
-          const cached2 = this.cache.get(prompt, this.config.vaultRoot);
+          const cached2 = this.cache.get(prompt, this.config.vaultRoot, this.cacheScope);
           if (cached2) {
             return cached2;
           }
@@ -8853,201 +8789,111 @@ var init_traverser = __esm({
         if (this.config.gateEnabled && isTrivialFollowUp(state)) {
           return finish2("skipped", "a short acknowledgement; no reference needed");
         }
-        let dir = resolve7(this.config.vaultRoot);
-        let gate;
-        for (let hop = 0; hop < this.config.maxHops; hop++) {
-          let manifest;
-          try {
-            manifest = this.manifests.load(dir);
-          } catch (error2) {
-            if (error2 instanceof ManifestError) {
-              return this.withFallback(finish2, visited, "error", `malformed manifest: ${error2.message}`, gate);
-            }
-            throw error2;
+        const rootDir = resolve7(this.config.vaultRoot);
+        let loaded;
+        try {
+          loaded = this.manifests.load(rootDir);
+        } catch (error2) {
+          if (error2 instanceof ManifestError) {
+            return this.withFallback(finish2, [], "error", `malformed manifest: ${error2.message}`, void 0);
           }
-          if (!manifest) {
-            const where = this.manifests.relativeToVault(dir);
-            if (hop === 0) {
-              return finish2("no-index", `no _index.json at the vault root (${where})`, { gate });
-            }
-            return this.withFallback(finish2, visited, "no-index", `no _index.json in '${where}'`, gate);
-          }
-          visited.push(manifest);
-          const criteria = {};
-          for (const entry2 of manifest.entries) criteria[entry2.id] = entry2.criteria;
-          const questions = {
-            [ROUTE_QUESTION]: { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria }
-          };
-          if (hop === 0 && this.config.gateEnabled) {
-            questions[GATE_QUESTION] = { type: "noul", instructions: GATE_INSTRUCTIONS };
-          }
-          const outcome = await this.client.ask(state, questions, { deadline });
-          if (!outcome.ok) {
-            return finish2("error", `decisions API failed: ${outcome.error}`, { gate });
-          }
-          if (outcome.warnings) warnings.push(...outcome.warnings);
-          if (hop === 0 && this.config.gateEnabled) {
-            const answer2 = outcome.answers[GATE_QUESTION];
-            if (answer2 && answer2.type === "noul" && typeof answer2.noul === "number") {
-              gate = { needed: answer2.noul >= this.config.gateThreshold, probability: answer2.noul };
-              if (!gate.needed) {
-                return finish2(
-                  "skipped",
-                  `gate says no reference needed (p=${answer2.noul.toFixed(3)} < ${this.config.gateThreshold})`,
-                  { gate }
-                );
-              }
-            } else {
-              this.logger.debug("gate question returned no noul answer; continuing without it");
-            }
-          }
-          const answer = outcome.answers[ROUTE_QUESTION];
-          if (!answer || answer.type !== "choice") {
-            return this.withFallback(finish2, visited, "error", "decisions API returned no choice answer", gate);
-          }
-          const entry = manifest.entries.find((candidate) => candidate.id === answer.choice);
-          if (!entry) {
-            return this.withFallback(
-              finish2,
-              visited,
-              "error",
-              `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(dir)}/_index.json`,
-              gate
-            );
-          }
-          const confidence = choiceConfidence(answer);
-          if (hop === 0 && this.config.compositeEnabled !== false && confidence >= this.config.minConfidence && answer.probabilities) {
-            const threshold = this.config.compositeThreshold ?? 0.25;
-            const marginRatio = this.config.compositeMarginRatio ?? 0.65;
-            const maxDocs = this.config.maxCompositeDocuments ?? 2;
-            const winnerProb = answer.probabilities[entry.id] ?? confidence;
-            const otherCandidates = manifest.entries.filter((cand) => {
-              if (cand.id === entry.id) return false;
-              const p = answer.probabilities?.[cand.id];
-              if (typeof p !== "number" || !Number.isFinite(p)) return false;
-              return p >= threshold && p >= winnerProb * marginRatio;
-            });
-            if (otherCandidates.length > 0 && maxDocs > 1) {
-              otherCandidates.sort(
-                (a, b) => (answer.probabilities?.[b.id] ?? 0) - (answer.probabilities?.[a.id] ?? 0)
-              );
-              const selectedCandidates = [entry, ...otherCandidates.slice(0, maxDocs - 1)];
-              const branchPromises = selectedCandidates.map((cand) => {
-                const candConf = cand.id === entry.id ? confidence : choiceConfidence({ choice: cand.id, probabilities: answer.probabilities });
-                return this.traverseBranch(
-                  manifest,
-                  dir,
-                  cand,
-                  candConf,
-                  answer.probabilities,
-                  answer.action?.act_probability,
-                  state,
-                  deadline,
-                  visited
-                );
-              });
-              const branchResults = await Promise.all(branchPromises);
-              const uniqueDocs = [];
-              const seenPaths = /* @__PURE__ */ new Set();
-              for (const b of branchResults) {
-                if (b.document && !seenPaths.has(b.document.path)) {
-                  seenPaths.add(b.document.path);
-                  uniqueDocs.push({
-                    ...b.document,
-                    confidence: b.minConfidence,
-                    trail: b.segments.join(" -> ")
-                  });
-                }
-                hops.push(...b.hops);
-                if (b.warnings.length) warnings.push(...b.warnings);
-              }
-              if (uniqueDocs.length > 1) {
-                const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
-                const compositeTrail = `Composite [${budgeted.map((d) => d.trail ?? d.path).join(", ")}]`;
-                const compositeMinConf = Math.min(...budgeted.map((d) => d.confidence ?? 1));
-                return finish2(
-                  "composite",
-                  `composite route resolved ${budgeted.length} complementary guides`,
-                  {
-                    document: budgeted[0],
-                    documents: budgeted,
-                    composite: true,
-                    trail: compositeTrail,
-                    minConfidence: compositeMinConf,
-                    gate
-                  }
-                );
-              } else if (uniqueDocs.length === 1) {
-                const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
-                return finish2("leaf", branchResults[0].reason, {
-                  document: budgeted[0],
-                  documents: budgeted,
-                  trail: branchResults[0].segments.join(" -> "),
-                  minConfidence: branchResults[0].minConfidence,
-                  gate
-                });
-              }
-            }
-          }
-          const actProbability = answer.action?.act_probability;
-          hops.push({
-            from: this.manifests.relativeToVault(dir),
-            chosen: entry.id,
-            type: entry.type,
-            confidence,
-            latencyMs: outcome.serverMs ?? outcome.latencyMs,
-            probabilities: answer.probabilities,
-            optionCount: manifest.entries.length,
-            ...typeof actProbability === "number" ? { actProbability } : {}
-          });
-          segments.push(entry.type === "leaf" ? basename4(entry.targetPath) : entry.id);
-          if (confidence < this.config.minConfidence) {
-            return this.withFallback(
-              finish2,
-              visited,
-              "low-confidence",
-              `confidence ${confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${hop + 1}`,
-              gate
-            );
-          }
-          const minAct = this.config.minActProbability ?? 0;
-          if (minAct > 0 && typeof actProbability === "number" && actProbability < minAct) {
-            return this.withFallback(
-              finish2,
-              visited,
-              "low-confidence",
-              `act probability ${actProbability.toFixed(3)} below threshold ${minAct} at hop ${hop + 1}`,
-              gate
-            );
-          }
-          let target;
-          try {
-            target = this.manifests.resolveTarget(manifest, entry);
-          } catch (error2) {
-            return this.withFallback(finish2, visited, "error", error2.message, gate);
-          }
-          if (entry.type === "leaf") {
-            const document = this.readDocument(target, entry);
-            if (!document) {
-              return this.withFallback(
-                finish2,
-                visited,
-                "error",
-                `leaf '${entry.id}' points at a missing file: ${entry.targetPath}`,
-                gate
-              );
-            }
-            return finish2("leaf", `routed in ${hops.length} hop(s)`, { document, gate });
-          }
-          dir = target;
+          throw error2;
         }
-        return this.withFallback(
-          finish2,
-          visited,
-          "max-hops",
-          `hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`,
+        if (!loaded) return finish2("no-index", `no _index.json at the vault root (${this.manifests.relativeToVault(rootDir)})`);
+        const root = loaded;
+        const visited = [root];
+        const questions = { [ROUTE_QUESTION]: routeQuestion(root) };
+        if (this.config.gateEnabled) {
+          questions[GATE_QUESTION] = { type: "noul", instructions: GATE_INSTRUCTIONS };
+        }
+        const outcome = await this.client.ask(state, questions, { deadline });
+        if (!outcome.ok) {
+          return finish2("error", `decisions API failed: ${outcome.error}`);
+        }
+        if (outcome.warnings) warnings.push(...outcome.warnings);
+        let gate;
+        if (this.config.gateEnabled) {
+          const answer2 = outcome.answers[GATE_QUESTION];
+          if (answer2 && answer2.type === "noul" && typeof answer2.noul === "number") {
+            gate = { needed: answer2.noul >= this.config.gateThreshold, probability: answer2.noul };
+            if (!gate.needed) {
+              return finish2(
+                "skipped",
+                `gate says no reference needed (p=${answer2.noul.toFixed(3)} < ${this.config.gateThreshold})`,
+                { gate }
+              );
+            }
+          } else {
+            this.logger.debug("gate question returned no noul answer; continuing without it");
+          }
+        }
+        const answer = outcome.answers[ROUTE_QUESTION];
+        if (!answer || answer.type !== "choice") {
+          return this.withFallback(finish2, visited, "error", "decisions API returned no choice answer", gate);
+        }
+        const entry = root.entries.find((candidate) => candidate.id === answer.choice);
+        if (!entry) {
+          return this.withFallback(
+            finish2,
+            visited,
+            "error",
+            `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(rootDir)}/_index.json`,
+            gate
+          );
+        }
+        const firstHop = this.hop(root, entry, answer, outcome.serverMs ?? outcome.latencyMs);
+        const conclude = (branch) => {
+          hops.push(...branch.hops);
+          segments.push(...branch.segments.slice(1));
+          warnings.push(...branch.warnings);
+          if (branch.document) {
+            const document = allocateUnifiedContextBudget([branch.document], this.config.maxDocumentChars)[0];
+            return finish2("leaf", branch.reason, { document, gate });
+          }
+          if (branch.serviceDown) return finish2("error", branch.reason, { gate });
+          return this.withFallback(finish2, branch.visited, branch.status, branch.reason, gate);
+        };
+        const runnersUp = this.runnersUp(root, entry, answer, firstHop.confidence);
+        if (runnersUp.length === 0) {
+          return conclude(await this.walk(root, entry, firstHop, true, state, deadline, visited));
+        }
+        const branches = await Promise.all([
+          this.walk(root, entry, firstHop, true, state, deadline, visited),
+          ...runnersUp.map(
+            (candidate) => this.walk(
+              root,
+              candidate,
+              // One request decided every first hop; its latency is counted on the top choice only.
+              this.hop(root, candidate, answer, 0, choiceConfidence({ choice: candidate.id, probabilities: answer.probabilities })),
+              false,
+              state,
+              deadline,
+              visited
+            )
+          )
+        ]);
+        const uniqueDocs = [];
+        const seenPaths = /* @__PURE__ */ new Set();
+        for (const branch of branches) {
+          if (branch.document && !seenPaths.has(branch.document.path)) {
+            seenPaths.add(branch.document.path);
+            uniqueDocs.push({ ...branch.document, confidence: branch.minConfidence, trail: branch.segments.join(" -> ") });
+          }
+        }
+        if (uniqueDocs.length < 2) return conclude(branches[0]);
+        for (const branch of branches) {
+          hops.push(...branch.hops);
+          warnings.push(...branch.warnings);
+        }
+        const budgeted = allocateUnifiedContextBudget(uniqueDocs, this.config.maxDocumentChars);
+        return finish2("composite", `composite route resolved ${budgeted.length} complementary guides`, {
+          document: budgeted[0],
+          documents: budgeted,
+          composite: true,
+          trail: `Composite [${budgeted.map((d) => d.trail ?? d.path).join(", ")}]`,
+          minConfidence: Math.min(...budgeted.map((d) => d.confidence ?? 1)),
           gate
-        );
+        });
       }
       // -----------------------------------------------------------------------
       /** Normalise the prompt into the `state` the model reads. */
@@ -9079,244 +8925,106 @@ var init_traverser = __esm({
         const budgeted = allocateUnifiedContextBudget([raw], this.config.maxDocumentChars);
         return budgeted[0] ?? null;
       }
-      async traverseBranch(parentManifest, fromDir, entry, hop0Confidence, hop0Probabilities, hop0ActProbability, state, deadline, visited) {
-        const hops = [];
-        const segments = [
-          this.manifests.relativeToVault(fromDir) || "Root",
-          entry.type === "leaf" ? basename4(entry.targetPath) : entry.id
-        ];
-        const warnings = [];
-        const branchVisited = [...visited];
-        hops.push({
-          from: this.manifests.relativeToVault(fromDir),
+      hop(manifest, entry, answer, latencyMs, confidence = choiceConfidence(answer)) {
+        return {
+          from: this.manifests.relativeToVault(manifest.dir),
           chosen: entry.id,
           type: entry.type,
-          confidence: hop0Confidence,
-          latencyMs: 0,
-          probabilities: hop0Probabilities,
-          optionCount: parentManifest.entries.length,
-          ...typeof hop0ActProbability === "number" ? { actProbability: hop0ActProbability } : {}
-        });
-        if (entry.type === "leaf") {
-          let target;
-          try {
-            target = this.manifests.resolveTarget(parentManifest, entry);
-          } catch (error2) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: hop0Confidence,
-              status: "error",
-              reason: error2.message,
-              warnings
-            };
-          }
-          const document = this.readRawDocument(target, entry);
-          if (!document) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: hop0Confidence,
-              status: "error",
-              reason: `leaf '${entry.id}' points at a missing file: ${entry.targetPath}`,
-              warnings
-            };
-          }
-          return {
-            entry,
-            document,
-            hops,
-            segments,
-            minConfidence: hop0Confidence,
-            status: "leaf",
-            reason: `routed in 1 hop`,
-            warnings
-          };
+          confidence,
+          latencyMs,
+          probabilities: answer.probabilities,
+          optionCount: manifest.entries.length
+        };
+      }
+      /** Root options close enough to the top choice to route to alongside it, best first. */
+      runnersUp(root, entry, answer, confidence) {
+        const probabilities = answer.probabilities;
+        const maxDocs = this.config.maxCompositeDocuments ?? 2;
+        if (this.config.compositeEnabled === false || maxDocs < 2 || confidence < this.config.minConfidence || !probabilities) {
+          return [];
         }
-        let dir;
-        try {
-          dir = this.manifests.resolveTarget(parentManifest, entry);
-        } catch (error2) {
-          return {
-            entry,
-            document: null,
-            hops,
-            segments,
-            minConfidence: hop0Confidence,
-            status: "error",
-            reason: error2.message,
-            warnings
-          };
-        }
-        for (let hop = 1; hop < this.config.maxHops; hop++) {
-          let manifest;
-          try {
-            manifest = this.manifests.load(dir);
-          } catch (error2) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "error",
-              reason: error2 instanceof ManifestError ? `malformed manifest: ${error2.message}` : error2.message,
-              warnings
-            };
-          }
-          if (!manifest) {
-            const where = this.manifests.relativeToVault(dir);
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "no-index",
-              reason: `no _index.json in '${where}'`,
-              warnings
-            };
-          }
-          branchVisited.push(manifest);
-          const criteria = {};
-          for (const e of manifest.entries) criteria[e.id] = e.criteria;
-          const questions = {
-            [ROUTE_QUESTION]: { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria }
-          };
-          const outcome = await this.client.ask(state, questions, { deadline });
-          if (!outcome.ok) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "error",
-              reason: `decisions API failed: ${outcome.error}`,
-              warnings
-            };
-          }
-          if (outcome.warnings) warnings.push(...outcome.warnings);
-          const answer = outcome.answers[ROUTE_QUESTION];
-          if (!answer || answer.type !== "choice") {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "error",
-              reason: "decisions API returned no choice answer",
-              warnings
-            };
-          }
-          const chosenEntry = manifest.entries.find((c) => c.id === answer.choice);
-          if (!chosenEntry) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "error",
-              reason: `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(dir)}/_index.json`,
-              warnings
-            };
-          }
-          const confidence = choiceConfidence(answer);
-          const actProbability = answer.action?.act_probability;
-          hops.push({
-            from: this.manifests.relativeToVault(dir),
-            chosen: chosenEntry.id,
-            type: chosenEntry.type,
-            confidence,
-            latencyMs: outcome.serverMs ?? outcome.latencyMs,
-            probabilities: answer.probabilities,
-            optionCount: manifest.entries.length,
-            ...typeof actProbability === "number" ? { actProbability } : {}
-          });
-          segments.push(chosenEntry.type === "leaf" ? basename4(chosenEntry.targetPath) : chosenEntry.id);
-          if (confidence < this.config.minConfidence) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "low-confidence",
-              reason: `confidence ${confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${hop + 1}`,
-              warnings
-            };
-          }
-          const minAct = this.config.minActProbability ?? 0;
-          if (minAct > 0 && typeof actProbability === "number" && actProbability < minAct) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "low-confidence",
-              reason: `act probability ${actProbability.toFixed(3)} below threshold ${minAct} at hop ${hop + 1}`,
-              warnings
-            };
-          }
-          let target;
-          try {
-            target = this.manifests.resolveTarget(manifest, chosenEntry);
-          } catch (error2) {
-            return {
-              entry,
-              document: null,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "error",
-              reason: error2.message,
-              warnings
-            };
-          }
-          if (chosenEntry.type === "leaf") {
-            const document = this.readRawDocument(target, chosenEntry);
-            if (!document) {
-              return {
-                entry,
-                document: null,
-                hops,
-                segments,
-                minConfidence: Math.min(...hops.map((h) => h.confidence)),
-                status: "error",
-                reason: `leaf '${chosenEntry.id}' points at a missing file: ${chosenEntry.targetPath}`,
-                warnings
-              };
-            }
-            return {
-              entry,
-              document,
-              hops,
-              segments,
-              minConfidence: Math.min(...hops.map((h) => h.confidence)),
-              status: "leaf",
-              reason: `routed in ${hops.length} hop(s)`,
-              warnings
-            };
-          }
-          dir = target;
-        }
-        return {
-          entry,
-          document: null,
+        const threshold = this.config.compositeThreshold ?? 0.25;
+        const marginRatio = this.config.compositeMarginRatio ?? 0.65;
+        const winnerProb = probabilities[entry.id] ?? confidence;
+        return root.entries.filter((candidate) => {
+          if (candidate.id === entry.id) return false;
+          const p = probabilities[candidate.id];
+          return typeof p === "number" && Number.isFinite(p) && p >= threshold && p >= winnerProb * marginRatio;
+        }).sort((a, b) => probabilities[b.id] - probabilities[a.id]).slice(0, maxDocs - 1);
+      }
+      /**
+       * Walk down from `entry`, the root's choice already decided as `firstHop`, to a leaf.
+       * `checkFirst` holds that first hop to the confidence threshold too; a composite
+       * runner-up skips it, having passed the composite threshold instead.
+       */
+      async walk(root, entry, firstHop, checkFirst, state, deadline, visited) {
+        const hops = [firstHop];
+        const segments = ["Root", label(entry)];
+        const warnings = [];
+        const branchVisited = [...visited];
+        const end = (status, reason, document = null, serviceDown = false) => ({
+          document,
           hops,
           segments,
+          visited: branchVisited,
           minConfidence: Math.min(...hops.map((h) => h.confidence)),
-          status: "max-hops",
-          reason: `hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`,
-          warnings
+          status,
+          reason,
+          warnings,
+          ...serviceDown ? { serviceDown } : {}
+        });
+        const unsure = (hop, n) => {
+          if (hop.confidence < this.config.minConfidence) {
+            return end("low-confidence", `confidence ${hop.confidence.toFixed(3)} below threshold ${this.config.minConfidence} at hop ${n}`);
+          }
+          return null;
         };
+        if (checkFirst) {
+          const stop = unsure(firstHop, 1);
+          if (stop) return stop;
+        }
+        let manifest = root;
+        let chosen = entry;
+        for (let hop = 1; ; hop++) {
+          let target;
+          try {
+            target = this.manifests.resolveTarget(manifest, chosen);
+          } catch (error2) {
+            return end("error", error2.message);
+          }
+          if (chosen.type === "leaf") {
+            const document = this.readRawDocument(target, chosen);
+            if (!document) return end("error", `leaf '${chosen.id}' points at a missing file: ${chosen.targetPath}`);
+            return end("leaf", `routed in ${hops.length} hop(s)`, document);
+          }
+          if (hop >= this.config.maxHops) {
+            return end("max-hops", `hit the ${this.config.maxHops}-hop ceiling without reaching a leaf`);
+          }
+          let next;
+          try {
+            next = this.manifests.load(target);
+          } catch (error2) {
+            return end("error", error2 instanceof ManifestError ? `malformed manifest: ${error2.message}` : error2.message);
+          }
+          if (!next) return end("no-index", `no _index.json in '${this.manifests.relativeToVault(target)}'`);
+          manifest = next;
+          branchVisited.push(manifest);
+          const outcome = await this.client.ask(state, { [ROUTE_QUESTION]: routeQuestion(manifest) }, { deadline });
+          if (!outcome.ok) return end("error", `decisions API failed: ${outcome.error}`, null, true);
+          if (outcome.warnings) warnings.push(...outcome.warnings);
+          const answer = outcome.answers[ROUTE_QUESTION];
+          if (!answer || answer.type !== "choice") return end("error", "decisions API returned no choice answer");
+          const found = manifest.entries.find((candidate) => candidate.id === answer.choice);
+          if (!found) {
+            return end("error", `model chose '${answer.choice}', which is not in ${this.manifests.relativeToVault(target)}/_index.json`);
+          }
+          chosen = found;
+          const taken = this.hop(manifest, chosen, answer, outcome.serverMs ?? outcome.latencyMs);
+          hops.push(taken);
+          segments.push(label(chosen));
+          const stop = unsure(taken, hop + 1);
+          if (stop) return stop;
+        }
       }
       /**
        * Swap in a catch-all note, if the vault has one.
@@ -10464,7 +10172,6 @@ function createTraverser(config2, vaultRoot) {
     vaultRoot,
     maxHops: config2.maxHops,
     minConfidence: config2.minConfidence,
-    minActProbability: config2.minActProbability,
     gateEnabled: false,
     gateThreshold: config2.gateThreshold,
     fallbackDocument: "",
@@ -10504,7 +10211,7 @@ function renderRoutingChecks(checks) {
       lines.push(`     ${result.reason}`);
     }
     for (const hop of result.hops) {
-      const ranked = Object.entries(hop.probabilities ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([label, probability]) => `${label}=${probability.toFixed(2)}`).join("  ");
+      const ranked = Object.entries(hop.probabilities ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([label2, probability]) => `${label2}=${probability.toFixed(2)}`).join("  ");
       lines.push(`     hop ${hop.from || "."} -> ${hop.chosen} (${hop.confidence.toFixed(2)})   ${ranked}`);
     }
     lines.push("");
@@ -10571,8 +10278,8 @@ var init_tools = __esm({
     "use strict";
     init_zod();
     init_src();
-    init_frontmatter();
     init_env();
+    init_frontmatter();
     init_paths();
     init_vault();
     init_config2();
@@ -10696,7 +10403,7 @@ var init_tools = __esm({
         const checks = await checkRouting(config2, vault, input.prompts);
         const allFailed = checks.every((check) => check.result.status === "error");
         if (!allFailed) return ok(renderRoutingChecks(checks));
-        const fix = isLocalUrl(config2.decisionsUrl) ? "Check that the Laya host is running (brain-traverse health), or point BRAIN_DECISIONS_URL elsewhere." : config2.apiKey ? "Check the API key and BRAIN_DECISIONS_URL (brain-traverse health says which is wrong)." : "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment, or point BRAIN_DECISIONS_URL at a Laya host.";
+        const fix = config2.decisionsUrl.replace(/\/+$/, "") !== JEV_URL ? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key." : config2.apiKey ? "Check the API key (brain-traverse health says what is wrong)." : "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
         return {
           text: `${renderRoutingChecks(checks)}
 
@@ -16951,9 +16658,9 @@ var init_ajvProvider_CEoC_sr = __esm({
         }
       };
       var Label = class extends Node {
-        constructor(label) {
+        constructor(label2) {
           super();
-          this.label = label;
+          this.label = label2;
           this.names = {};
         }
         render({ _n }) {
@@ -16961,9 +16668,9 @@ var init_ajvProvider_CEoC_sr = __esm({
         }
       };
       var Break = class extends Node {
-        constructor(label) {
+        constructor(label2) {
           super();
-          this.label = label;
+          this.label = label2;
           this.names = {};
         }
         render({ _n }) {
@@ -17328,11 +17035,11 @@ var init_ajvProvider_CEoC_sr = __esm({
         endFor() {
           return this._endBlockNode(For);
         }
-        label(label) {
-          return this._leafNode(new Label(label));
+        label(label2) {
+          return this._leafNode(new Label(label2));
         }
-        break(label) {
-          return this._leafNode(new Break(label));
+        break(label2) {
+          return this._leafNode(new Break(label2));
         }
         return(value) {
           const node2 = new Return();
@@ -25296,8 +25003,8 @@ function addBrain(options) {
     const folder = normaliseVaultPath(options.as ?? fetched.meta.name ?? source.name);
     if (folder === ".") throw new Error("a brain goes into its own folder, not the vault root");
     const target = resolveInVault(options.vaultRoot, folder, "folder");
-    const record2 = readSources(options.vaultRoot);
-    if (record2.brains[folder]) throw new Error(`'${folder}' already holds ${record2.brains[folder].source}; run \`brain-keeper update ${folder}\` to update it`);
+    const existing = readSources(options.vaultRoot).brains[folder];
+    if (existing) throw new Error(`'${folder}' already holds ${existing.source}; run \`brain-keeper update ${folder}\` to update it`);
     if (existsSync4(target) && readdirSync2(target).length > 0) {
       throw new Error(`the folder '${folder}' already exists in the vault; choose another with --as <folder>`);
     }
@@ -25319,6 +25026,8 @@ function addBrain(options) {
     };
     if (result.dryRun) return result;
     result.compiled = withVaultLock(options.vaultRoot, () => {
+      const record2 = readSources(options.vaultRoot);
+      if (record2.brains[folder]) throw new Error(`'${folder}' was added by another process meanwhile`);
       const hashes = {};
       for (const file of notes) {
         const content = readFileSync5(join4(fetched.dir, file), "utf8");
@@ -25407,21 +25116,31 @@ function mergeEvals(vaultRoot, folder, brainDir) {
   return added.length;
 }
 function updateBrains(options) {
-  const record2 = readSources(options.vaultRoot);
-  const folders = options.folder ? [normaliseVaultPath(options.folder)] : Object.keys(record2.brains).sort();
-  if (options.folder && !record2.brains[folders[0]]) {
-    throw new Error(`'${folders[0]}' is not a brain added with brain-keeper add. Added: ${Object.keys(record2.brains).join(", ") || "none"}`);
+  const installedBrains = readSources(options.vaultRoot).brains;
+  const folders = options.folder ? [normaliseVaultPath(options.folder)] : Object.keys(installedBrains).sort();
+  if (options.folder && !installedBrains[folders[0]]) {
+    throw new Error(`'${folders[0]}' is not a brain added with brain-keeper add. Added: ${Object.keys(installedBrains).join(", ") || "none"}`);
   }
   const dryRun = options.dryRun === true;
   const updates = [];
+  const sources = /* @__PURE__ */ new Map();
+  for (const folder of folders) {
+    try {
+      sources.set(folder, (options.fetch ?? fetchSource)(parseSource(installedBrains[folder].source)));
+    } catch (error2) {
+      sources.set(folder, error2);
+    }
+  }
   const run = () => {
+    const record2 = readSources(options.vaultRoot);
     for (const folder of folders) {
-      const installed = record2.brains[folder];
+      const installed = record2.brains[folder] ?? installedBrains[folder];
       const update = { folder, source: installed.source, from: installed.commit ?? installed.version, added: [], updated: [], kept: [], removedUpstream: [], evals: 0 };
       updates.push(update);
-      let fetched;
+      const fetched = sources.get(folder);
       try {
-        fetched = (options.fetch ?? fetchSource)(parseSource(installed.source));
+        if (!record2.brains[folder]) throw new Error(`'${folder}' was removed by another process meanwhile`);
+        if (fetched instanceof Error) throw fetched;
         update.to = fetched.commit ?? fetched.meta.version;
         const target = resolveInVault(options.vaultRoot, folder, "folder");
         const upstream = new Set(brainFiles(fetched.dir).filter((file) => file !== EVALS_FILE));
@@ -25463,16 +25182,18 @@ function updateBrains(options) {
         }
       } catch (error2) {
         update.error = error2.message;
-      } finally {
-        fetched?.cleanup();
       }
     }
     if (dryRun) return void 0;
     writeSources(options.vaultRoot, record2);
     return compileVault(options.vaultRoot);
   };
-  const compiled = dryRun ? run() : withVaultLock(options.vaultRoot, run);
-  return { updates, compiled, dryRun };
+  try {
+    const compiled = dryRun ? run() : withVaultLock(options.vaultRoot, run);
+    return { updates, compiled, dryRun };
+  } finally {
+    for (const fetched of sources.values()) if (!(fetched instanceof Error)) fetched.cleanup();
+  }
 }
 function listStarters() {
   if (!STARTERS_DIR) return [];
@@ -25980,8 +25701,8 @@ Codex
 Any other MCP client (stdio)
   { "command": "node", "args": [${JSON.stringify(launcher)}, "serve"], "env": { "TYPESAFE_API_KEY": "<your key>" } }
 
-Using a self-hosted Laya host instead of Jev? Drop the key (or pass its
-LAYA_API_KEY as BRAIN_DECISIONS_API_KEY) and set "decisionsUrl" in the config file.
+Using a self-hosted decisions service with the same API as Jev? Set "decisionsUrl"
+in the config file (or BRAIN_DECISIONS_URL), and pass a key only if it asks for one.
 
 Pi needs none of this: \`pi install\` registers the tools and commands natively.
 `.trim();

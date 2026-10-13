@@ -8,7 +8,6 @@ node_modules/
 brain-traverse.config.json
 .env
 .env.*
-!.env.example
 
 # Logs and state
 *.log
@@ -17,15 +16,11 @@ npm-debug.log*
 .brain.lock
 .brain.cache.json
 
-# Python (host-laya)
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-
 # Editors and OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Benchmarks
+benchmark/

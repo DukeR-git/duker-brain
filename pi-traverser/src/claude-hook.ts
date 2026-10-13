@@ -32,7 +32,8 @@ import type { TraversalResult } from "../../brain-core/src/types.js";
 import { describeConfig, loadConfig, type BrainConfig } from "./config.js";
 import { createStack } from "./extension.js";
 import { formatStatus, formatTrace } from "./inject.js";
-import { isTrivialFollowUp, planInjection, type InjectedGuide } from "./session.js";
+import { isTrivialFollowUp } from "../../brain-core/src/traverser.js";
+import { planInjection, type InjectedGuide } from "./session.js";
 
 /** Claude Code's cap on one hook output string. */
 export const HOOK_OUTPUT_LIMIT = 10_000;

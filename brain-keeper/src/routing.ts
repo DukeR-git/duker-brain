@@ -45,7 +45,6 @@ export function createTraverser(config: KeeperConfig, vaultRoot: string): BrainT
 		vaultRoot,
 		maxHops: config.maxHops,
 		minConfidence: config.minConfidence,
-		minActProbability: config.minActProbability,
 		gateEnabled: false,
 		gateThreshold: config.gateThreshold,
 		fallbackDocument: "",
@@ -66,8 +65,7 @@ export async function checkRouting(
 	const traverser = createTraverser(config, vaultRoot);
 	const checks: RoutingCheck[] = [];
 
-	// One at a time: a Laya host serialises forward passes anyway, and a burst of
-	// twenty requests is how a hosted API earns you a 429.
+	// One at a time: a burst of twenty requests is how a hosted API earns you a 429.
 	for (const { prompt, expected } of prompts) {
 		const result = await traverser.route(prompt);
 		const docs =
