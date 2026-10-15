@@ -310,6 +310,8 @@ export type ExportFormat = "cursor" | "windsurf" | "aider" | "bundle";
 
 export interface ExportOptions {
 	dryRun?: boolean;
+	/** Replace existing files the exporter did not write. */
+	overwrite?: boolean;
 	includeCriteria?: boolean;
 	tagFilter?: string[];
 }

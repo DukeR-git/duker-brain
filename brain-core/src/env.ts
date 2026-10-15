@@ -64,6 +64,13 @@ export function resolveApiKey(env: NodeJS.ProcessEnv, fromFile?: string): string
 export const PROJECT_CONFIG_FILE = "brain-traverse.config.json";
 
 /**
+ * Keys `./brain-traverse.config.json` may not set. That file arrives with any
+ * repository you clone, so it must not send your API key and prompts to its
+ * own server, or point the route log at a file of its choosing.
+ */
+const USER_ONLY_KEYS = ["decisionsUrl", "decisionsPath", "apiKey", "routeLog"];
+
+/**
  * The per-user config, shared by every harness and every project:
  * `$XDG_CONFIG_HOME/brain-traverse/config.json`, else `~/.config/brain-traverse/config.json`.
  *
@@ -117,6 +124,12 @@ export function readConfigFiles(cwd: string, env: NodeJS.ProcessEnv, label: stri
 			throw new Error(`${label}: ${path} must contain a JSON object of settings`);
 		}
 		const record = values as Record<string, unknown>;
+		if (!explicit && path !== candidates[0]) {
+			for (const key of USER_ONLY_KEYS.filter((key) => key in record)) {
+				delete record[key];
+				warnings.push(`${path}: ignored ${key}: a project file may not set it; use ${candidates[0]} or a BRAIN_* variable`);
+			}
+		}
 		if (typeof record.vaultRoot === "string" && record.vaultRoot.trim()) {
 			record.vaultRoot = resolveUserPath(record.vaultRoot.trim(), dirname(path));
 		}

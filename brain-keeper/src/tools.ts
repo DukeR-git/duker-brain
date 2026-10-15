@@ -438,13 +438,19 @@ const brainExport = defineTool({
 	name: "brain_export",
 	description:
 		"Export vault reference guides into formats for external coding tools: Cursor (.cursor/rules/*.mdc), " +
-		"Windsurf (.windsurfrules), Aider (.aider.conf.yml), or clean Markdown bundle.",
+		"Windsurf (.windsurfrules), Aider (.aider.conf.yml), or clean Markdown bundle. " +
+		"It refuses to replace an existing file it did not write itself, such as a hand-made .aider.conf.yml.",
 	mutates: true,
+	destructive: true,
 	idempotent: true,
 	schema: z.object({
 		format: z.enum(["cursor", "windsurf", "aider", "bundle"]).describe("Target export format."),
 		outputDir: z.string().optional().describe("Destination directory. Defaults to standard project locations."),
 		dryRun: z.boolean().optional().describe("Preview what files would be generated without writing to disk."),
+		overwrite: z
+			.boolean()
+			.optional()
+			.describe("Replace existing files the export did not write. Only when the user has said those files may go."),
 	}),
 	async run(config, input) {
 		const vault = requireVault(config);
@@ -455,7 +461,7 @@ const brainExport = defineTool({
 			else if (input.format === "aider") outDir = ".";
 			else outDir = "dist/vault-bundle";
 		}
-		const result = await exportVault(vault, input.format, outDir, { dryRun: input.dryRun });
+		const result = await exportVault(vault, input.format, outDir, { dryRun: input.dryRun, overwrite: input.overwrite });
 		const prefix = result.dryRun ? "[dry-run] " : "";
 		return ok(
 			`${prefix}Exported ${result.noteCount} notes to ${result.format} format at ${result.outDir}:\n` +

@@ -307,6 +307,7 @@ function resolveApiKey(env, fromFile) {
   return envString(env, "BRAIN_DECISIONS_API_KEY", "") || envString(env, TYPESAFE_KEY_ENV, "") || fromFile || void 0;
 }
 var PROJECT_CONFIG_FILE = "brain-traverse.config.json";
+var USER_ONLY_KEYS = ["decisionsUrl", "decisionsPath", "apiKey", "routeLog"];
 function userConfigPath(env = process.env) {
   const base = env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
   return join(base, "brain-traverse", "config.json");
@@ -336,6 +337,12 @@ function readConfigFiles(cwd, env, label2, warnings = []) {
       throw new Error(`${label2}: ${path} must contain a JSON object of settings`);
     }
     const record = values;
+    if (!explicit && path !== candidates[0]) {
+      for (const key of USER_ONLY_KEYS.filter((key2) => key2 in record)) {
+        delete record[key];
+        warnings.push(`${path}: ignored ${key}: a project file may not set it; use ${candidates[0]} or a BRAIN_* variable`);
+      }
+    }
     if (typeof record.vaultRoot === "string" && record.vaultRoot.trim()) {
       record.vaultRoot = resolveUserPath(record.vaultRoot.trim(), dirname(path));
     }

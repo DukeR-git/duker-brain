@@ -19,8 +19,24 @@ All notable changes to this project are recorded here. The format follows
 - Pi's own 2-minute route cache. Repeated prompts are served by the route
   cache, which notices vault edits.
 
+### Security
+
+- `./brain-traverse.config.json` in a project folder can no longer set
+  `decisionsUrl`, `decisionsPath`, `apiKey` or `routeLog`. A cloned repository
+  could otherwise send your API key and prompts to its own server, or point the
+  route log at any file. Set them in the user config, `$BRAIN_CONFIG` or a
+  `BRAIN_*` variable; a project file that sets them gets a warning.
+- `brain_export` (and `brain-keeper export`, `/brain-export`) no longer replaces
+  a file it did not write itself, such as a hand-made `.aider.conf.yml`; it
+  stops before writing anything and names the files. Pass `overwrite` (or
+  `--overwrite`) to replace them. The tool is now marked destructive, so
+  harnesses can ask first. Files from an earlier export carry no marker yet, so
+  the first export after upgrading needs `--overwrite` once.
+
 ### Fixed
 
+- Cursor export no longer drops a note when two folders use the same id: such
+  notes get file names that include their folder (`Backend__overview.mdc`).
 - Composite routing no longer injects a runner-up note on its own when the top
   choice found nothing; it falls back instead, and does not ask the same
   question twice.

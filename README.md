@@ -217,6 +217,9 @@ this order, and later sources win:
 
 1. `~/.config/brain-traverse/config.json`: per user. `init` writes `vaultRoot` here.
 2. `./brain-traverse.config.json`, or the file named by `$BRAIN_CONFIG`: per project.
+   Because a project file arrives with any repository you clone, it may not set
+   `decisionsUrl`, `decisionsPath`, `apiKey` or `routeLog`; those are ignored
+   with a warning (a `$BRAIN_CONFIG` file may set them).
 3. `BRAIN_*` environment variables.
 
 The settings you are most likely to touch:

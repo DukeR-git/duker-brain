@@ -62,6 +62,7 @@ Options
   --limit <n>               Most search results (default 10)
   --expect <id>             Expected destination for the last check prompt
   --dry-run                 For rebuild, init, add, update and export: report without writing
+  --overwrite               For export: replace existing files it did not write itself
   --example                 For init: include the example notes
   --starter <source>        For init: add a shared brain too, e.g. --starter python-backend
   --as <folder>             For add: the vault folder to put the brain in (default: its name)
@@ -292,7 +293,7 @@ async function main(): Promise<number> {
 			const fmt = (typeof args.flags.format === "string" ? args.flags.format : "cursor") as any;
 			const out = typeof args.flags.out === "string" ? args.flags.out : undefined;
 			const dryRun = args.flags["dry-run"] === true;
-			const res = await runTool(tool, config, { format: fmt, outputDir: out, dryRun });
+			const res = await runTool(tool, config, { format: fmt, outputDir: out, dryRun, overwrite: args.flags.overwrite === true });
 			if (res.isError) {
 				process.stderr.write(`${res.text}\n`);
 				return 1;

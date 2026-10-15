@@ -122,7 +122,7 @@ and ask before a removal.
 | `brain_doctor` | r | Health report — every problem with the action that fixes it |
 | `brain_check_routing` | r | Where do these prompts actually land, with the router's own settings? |
 | `brain_eval` | r | Run routing regression evals against the vault with accuracy & latency metrics |
-| `brain_export` | w | Export vault rules to Cursor (.cursor/rules/*.mdc), Windsurf, Aider, or bundle |
+| `brain_export` | w | Export vault rules to Cursor (.cursor/rules/*.mdc), Windsurf, Aider, or bundle. Refuses to replace files it did not write unless `overwrite` is set |
 | `brain_add_note` | w | Capture a new note |
 | `brain_update_note` | w | Retitle, rewrite criteria, replace or append to the body |
 | `brain_move_note` | w | Refile a note that is in the wrong place |
