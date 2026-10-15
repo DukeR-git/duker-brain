@@ -13,7 +13,7 @@
  * written into a file that would take the whole folder offline.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 
 import { isHashedId, parseNote, slugify } from "./frontmatter.js";
@@ -670,11 +670,4 @@ export function collectIssues(tree: VaultTree): VaultIssue[] {
 	});
 
 	return unique.sort((a, b) => rank[a.severity] - rank[b.severity] || compareText(a.path, b.path));
-}
-
-/** Create a folder inside the vault, refusing anything outside it. */
-export function ensureFolder(vaultRoot: string, folder: string): string {
-	const absolute = resolveInVault(vaultRoot, folder, "folder");
-	mkdirSync(absolute, { recursive: true });
-	return absolute;
 }

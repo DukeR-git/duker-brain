@@ -61,9 +61,9 @@ function runMain(name, main2, showStack = false) {
 }
 
 // pi-traverser/src/claude-hook.ts
-import { existsSync as existsSync4, mkdirSync as mkdirSync2, readFileSync as readFileSync7, readdirSync as readdirSync2, rmSync as rmSync2, statSync as statSync5 } from "node:fs";
+import { existsSync as existsSync5, mkdirSync as mkdirSync2, readFileSync as readFileSync8, readdirSync as readdirSync3, rmSync as rmSync2, statSync as statSync6 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { dirname as dirname4, join as join5 } from "node:path";
+import { dirname as dirname4, join as join6 } from "node:path";
 
 // brain-core/src/env.ts
 import { existsSync, readFileSync } from "node:fs";
@@ -209,10 +209,14 @@ var Logger = class {
 };
 
 // brain-core/src/routelog.ts
-import { appendFileSync, existsSync as existsSync2, mkdirSync, readFileSync as readFileSync4, renameSync as renameSync2, statSync as statSync3 } from "node:fs";
+import { appendFileSync, existsSync as existsSync3, mkdirSync, readFileSync as readFileSync5, renameSync as renameSync2, statSync as statSync4 } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, join as join3 } from "node:path";
+import { dirname as dirname3, join as join4 } from "node:path";
+
+// brain-core/src/vault.ts
+import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync, statSync as statSync3 } from "node:fs";
+import { basename as basename2, extname, join as join3, resolve as resolve4 } from "node:path";
 
 // brain-core/src/frontmatter.ts
 var FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?=\r?\n|$)(?:\r?\n)*/;
@@ -433,14 +437,55 @@ function validateManifest(raw, source) {
   return entries;
 }
 
+// brain-core/src/vault.ts
+var IGNORE_FILE = ".brainignore";
+function globToRegExp(glob) {
+  let source = "";
+  for (let index = 0; index < glob.length; index++) {
+    const char = glob[index];
+    if (char === "*" && glob[index + 1] === "*") {
+      source += ".*";
+      index++;
+    } else if (char === "*") {
+      source += "[^/]*";
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${source}$`, "i");
+}
+function loadIgnore(vaultRoot) {
+  let text = "";
+  try {
+    text = readFileSync4(join3(vaultRoot, IGNORE_FILE), "utf8");
+  } catch {
+    return () => false;
+  }
+  const anchored = [];
+  const names = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+#.*$/, "").trim();
+    if (!line || line.startsWith("#")) continue;
+    const pattern = line.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!pattern) continue;
+    (pattern.includes("/") ? anchored : names).push(globToRegExp(pattern));
+  }
+  return (path) => {
+    const name = path.split("/").pop() ?? path;
+    return anchored.some((pattern) => pattern.test(path)) || names.some((pattern) => pattern.test(name));
+  };
+}
+
 // brain-core/src/routelog.ts
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 function resolveRouteLogPath(setting, env = process.env, cwd = process.cwd()) {
   const value = setting.trim();
   if (!value) return void 0;
   if (value !== "auto") return resolveUserPath(value, cwd);
-  const base = env.XDG_STATE_HOME?.trim() || join3(homedir2(), ".local", "state");
-  return join3(base, "brain-traverse", "routes.jsonl");
+  const base = env.XDG_STATE_HOME?.trim() || join4(homedir2(), ".local", "state");
+  return join4(base, "brain-traverse", "routes.jsonl");
 }
 function toRouteRecord(prompt, result) {
   return {
@@ -470,7 +515,7 @@ function toRouteRecord(prompt, result) {
 function appendRouteLog(path, record) {
   try {
     mkdirSync(dirname3(path), { recursive: true });
-    if (existsSync2(path) && statSync3(path).size > MAX_LOG_BYTES) renameSync2(path, `${path}.1`);
+    if (existsSync3(path) && statSync4(path).size > MAX_LOG_BYTES) renameSync2(path, `${path}.1`);
     appendFileSync(path, JSON.stringify(record) + "\n", "utf8");
   } catch {
   }
@@ -750,24 +795,6 @@ var DecisionsClient = class {
       clearTimeout(timer);
     }
   }
-  /** Single-choice convenience wrapper. */
-  async pickChoice(state, instructions, criteria) {
-    const outcome = await this.ask(state, {
-      route_selection: { type: "choice", instructions, criteria }
-    });
-    if (!outcome.ok) return outcome;
-    const answer = outcome.answers.route_selection;
-    if (!answer || answer.type !== "choice") {
-      return { ok: false, error: "no choice answer returned", latencyMs: outcome.latencyMs };
-    }
-    return {
-      ok: true,
-      choice: answer.choice,
-      confidence: choiceConfidence(answer),
-      probabilities: answer.probabilities,
-      latencyMs: outcome.latencyMs
-    };
-  }
   /** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
   async health() {
     const models = await this.probe("/v1/models");
@@ -816,16 +843,16 @@ function choiceConfidence(answer) {
 }
 
 // brain-core/src/traverser.ts
-import { readFileSync as readFileSync6 } from "node:fs";
-import { basename as basename2, resolve as resolve5 } from "node:path";
+import { readFileSync as readFileSync7 } from "node:fs";
+import { basename as basename3, resolve as resolve5 } from "node:path";
 
 // brain-core/src/cache.ts
 import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync3, readdirSync, readFileSync as readFileSync5, statSync as statSync4 } from "node:fs";
-import { join as join4 } from "node:path";
+import { existsSync as existsSync4, readdirSync as readdirSync2, readFileSync as readFileSync6, statSync as statSync5 } from "node:fs";
+import { join as join5 } from "node:path";
 var CACHE_FILE = ".brain.cache.json";
 var DEFAULT_MAX_CACHE_ENTRIES = 500;
-var CACHE_VERSION = 2;
+var CACHE_VERSION = 3;
 function normalizePrompt(prompt) {
   return prompt.toLowerCase().trim().replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").replace(/^[\s.,!?;:()"'`]+|[\s.,!?;:()"'`]+$/g, "");
 }
@@ -834,35 +861,54 @@ function hashPrompt(normalized) {
 }
 function computeVaultFingerprint(vaultRoot) {
   const records = [];
-  function scan(dir) {
+  const ignored = loadIgnore(vaultRoot);
+  function scan(dir, rel) {
     let entries;
     try {
-      entries = readdirSync(dir);
+      entries = readdirSync2(dir, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const name of entries) {
-      if (name === ".git" || name === "node_modules" || name === ".trash" || name.startsWith(".")) {
-        continue;
+    for (const entry of entries) {
+      const name = entry.name;
+      if (name.startsWith(".") || name === "node_modules") continue;
+      const path = rel ? `${rel}/${name}` : name;
+      if (ignored(path)) continue;
+      const full = join5(dir, name);
+      let isDirectory = entry.isDirectory();
+      if (entry.isSymbolicLink()) {
+        try {
+          isDirectory = statSync5(full).isDirectory();
+        } catch {
+          continue;
+        }
       }
-      const full = join4(dir, name);
-      let st;
-      try {
-        st = statSync4(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) {
-        scan(full);
-      } else if (name === MANIFEST_FILE || name.endsWith(".md")) {
-        const rel = full.slice(vaultRoot.length).replace(/\\/g, "/");
-        records.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
+      if (isDirectory) {
+        scan(full, path);
+      } else if (name === MANIFEST_FILE) {
+        try {
+          const st = statSync5(full);
+          records.push(`${path}:${st.size}:${Math.floor(st.mtimeMs)}`);
+        } catch {
+        }
       }
     }
   }
-  scan(vaultRoot);
+  scan(vaultRoot, "");
   records.sort();
   return createHash2("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
+}
+function stampFiles(vaultRoot, result) {
+  const files = {};
+  for (const doc of result.documents ?? (result.document ? [result.document] : [])) {
+    try {
+      const st = statSync5(join5(vaultRoot, doc.path));
+      files[doc.path] = `${st.size}:${Math.floor(st.mtimeMs)}`;
+    } catch {
+      files[doc.path] = "";
+    }
+  }
+  return files;
 }
 var RouteCache = class {
   constructor(maxEntries = DEFAULT_MAX_CACHE_ENTRIES) {
@@ -872,6 +918,7 @@ var RouteCache = class {
   memory = /* @__PURE__ */ new Map();
   loadedVaultRoot = null;
   currentFingerprint = null;
+  fingerprintRoot = null;
   fingerprintMtime = 0;
   hits = 0;
   misses = 0;
@@ -892,7 +939,9 @@ ${norm}` : norm);
       this.misses++;
       return null;
     }
-    if (entry.fingerprint !== fp) {
+    const files = entry.files ?? {};
+    const fresh = stampFiles(vaultRoot, entry.result);
+    if (entry.fingerprint !== fp || Object.keys(fresh).some((path) => fresh[path] !== files[path])) {
       this.memory.delete(qHash);
       this.misses++;
       return null;
@@ -918,7 +967,7 @@ ${norm}` : norm);
     if (!norm) return;
     const qHash = hashPrompt(scope ? `${scope}
 ${norm}` : norm);
-    const fp = this.getOrUpdateFingerprint(vaultRoot);
+    const fp = this.currentFingerprint && this.fingerprintRoot === vaultRoot ? this.currentFingerprint : this.getOrUpdateFingerprint(vaultRoot);
     this.ensureLoaded(vaultRoot);
     if (this.memory.size >= this.maxEntries && !this.memory.has(qHash)) {
       const oldestKey = this.memory.keys().next().value;
@@ -931,6 +980,8 @@ ${norm}` : norm);
       queryHash: qHash,
       fingerprint: fp,
       result: JSON.parse(JSON.stringify(result)),
+      // shortcut: stamped after routing read the note, so an edit in those few ms is missed until the next one.
+      files: stampFiles(vaultRoot, result),
       createdAt: Date.now(),
       hits: 0
     };
@@ -947,9 +998,9 @@ ${norm}` : norm);
     this.currentFingerprint = null;
     this.fingerprintMtime = 0;
     if (vaultRoot) {
-      const diskPath = join4(vaultRoot, CACHE_FILE);
+      const diskPath = join5(vaultRoot, CACHE_FILE);
       try {
-        if (existsSync3(diskPath)) {
+        if (existsSync4(diskPath)) {
           writeFileAtomic(diskPath, JSON.stringify({ version: CACHE_VERSION, fingerprint: "", entries: {} }, null, 2));
         }
       } catch {
@@ -966,10 +1017,11 @@ ${norm}` : norm);
   }
   getOrUpdateFingerprint(vaultRoot) {
     const now = Date.now();
-    if (this.currentFingerprint && now - this.fingerprintMtime < 1500) {
+    if (this.currentFingerprint && this.fingerprintRoot === vaultRoot && now - this.fingerprintMtime < 1500) {
       return this.currentFingerprint;
     }
     this.currentFingerprint = computeVaultFingerprint(vaultRoot);
+    this.fingerprintRoot = vaultRoot;
     this.fingerprintMtime = now;
     return this.currentFingerprint;
   }
@@ -979,10 +1031,10 @@ ${norm}` : norm);
     this.loadFromDisk(vaultRoot);
   }
   loadFromDisk(vaultRoot) {
-    const diskPath = join4(vaultRoot, CACHE_FILE);
-    if (!existsSync3(diskPath)) return;
+    const diskPath = join5(vaultRoot, CACHE_FILE);
+    if (!existsSync4(diskPath)) return;
     try {
-      const content = readFileSync5(diskPath, "utf8");
+      const content = readFileSync6(diskPath, "utf8");
       const parsed = JSON.parse(content);
       if (parsed.version !== CACHE_VERSION || !parsed.entries) return;
       const fp = this.getOrUpdateFingerprint(vaultRoot);
@@ -995,7 +1047,7 @@ ${norm}` : norm);
     }
   }
   persistToDisk(vaultRoot) {
-    const diskPath = join4(vaultRoot, CACHE_FILE);
+    const diskPath = join5(vaultRoot, CACHE_FILE);
     const entriesObj = {};
     for (const [k, v] of this.memory.entries()) {
       entriesObj[k] = v;
@@ -1024,7 +1076,7 @@ function routeQuestion(manifest) {
   return { type: "choice", instructions: ROUTE_INSTRUCTIONS, criteria };
 }
 function label(entry) {
-  return entry.type === "leaf" ? basename2(entry.targetPath) : entry.id;
+  return entry.type === "leaf" ? basename3(entry.targetPath) : entry.id;
 }
 var ACKNOWLEDGEMENT_WORDS = new Set(
   "y yes yeah yep yup no nope ok okay k kk sure thanks thank you thx ty cheers continue go on ahead proceed carry keep going next done great nice cool perfect sounds looks good lgtm agree agreed do it ship please mate".split(" ")
@@ -1297,7 +1349,7 @@ var BrainTraverser = class {
   readRawDocument(path, entry) {
     let raw;
     try {
-      raw = readFileSync6(path, "utf8");
+      raw = readFileSync7(path, "utf8");
     } catch {
       return null;
     }
@@ -7241,6 +7293,9 @@ var EvalSuiteSchema = object({
 });
 
 // pi-traverser/src/inject.ts
+function resultDocuments(result) {
+  return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+}
 function formatSingleDocument(document, provenance, index) {
   const guideLabel = index ? `Reference Guide ${index.current}/${index.total}` : "Reference Guide";
   const header = [
@@ -7257,7 +7312,7 @@ ${document.content}
 ${footer}`;
 }
 function formatInjection(result) {
-  const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+  const docs = resultDocuments(result);
   if (docs.length === 0) return null;
   if (docs.length === 1) {
     const document = docs[0];
@@ -7274,12 +7329,8 @@ function formatInjection(result) {
   return formatted.join("\n\n");
 }
 function formatReminder(result, turnsAgo) {
-  const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+  const docs = resultDocuments(result);
   if (docs.length === 0) return null;
-  if (docs.length === 1) {
-    const document = docs[0];
-    return `[Reference Guide: ${document.title} \u2014 already provided ${turnsAgo} turn(s) ago (Source: ${document.path}); it still applies to this prompt.]`;
-  }
   return docs.map(
     (document) => `[Reference Guide: ${document.title} \u2014 already provided ${turnsAgo} turn(s) ago (Source: ${document.path}); it still applies to this prompt.]`
   ).join("\n");
@@ -7290,7 +7341,7 @@ function formatTrace(result) {
   if (result.gate) parts.push(`gate=${result.gate.probability.toFixed(2)}`);
   if (hops) parts.push(hops);
   parts.push(`${Math.round(result.totalMs)}ms total`);
-  const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+  const docs = resultDocuments(result);
   if (docs.length > 1) {
     parts.push(docs.map((d) => d.path).join(" + "));
   } else if (docs.length === 1) {
@@ -7306,7 +7357,7 @@ function formatStatus(result) {
     case "leaf":
       return `brain: ${result.document?.id ?? "?"} ${result.minConfidence.toFixed(2)}${cacheTag} ${Math.round(result.totalMs)}ms`;
     case "composite": {
-      const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+      const docs = resultDocuments(result);
       const ids = docs.map((d) => d.id).join("+");
       return `brain: ${ids} ${result.minConfidence.toFixed(2)}${cacheTag} ${Math.round(result.totalMs)}ms`;
     }
@@ -7321,9 +7372,6 @@ function formatStatus(result) {
 
 // pi-traverser/src/session.ts
 import { createHash as createHash3 } from "node:crypto";
-function resultDocuments(result) {
-  return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
-}
 function planInjection(result, injected, turn, reinjectAfterTurns) {
   const docs = resultDocuments(result);
   if (docs.length === 0) return { content: null, repeat: false, documents: docs };
@@ -7392,7 +7440,7 @@ async function runPromptHook(input, options = {}) {
   const session = readJson(sessionFile) ?? { turn: 0, injected: {} };
   session.turn++;
   const prompt = cleanPrompt(input.prompt ?? "");
-  const breakerFile = join5(dataDir, "breaker.json");
+  const breakerFile = join6(dataDir, "breaker.json");
   const breaker2 = readJson(breakerFile) ?? { failures: 0, downUntil: 0, cooldownMs: FIRST_COOLDOWN_MS };
   let result;
   if (!prompt || isTrivialFollowUp(prompt)) {
@@ -7453,7 +7501,7 @@ function runSessionStartHook(input, options = {}) {
     problem = `the brain-traverse config could not be read (${error2.message})`;
   }
   if (!problem) return void 0;
-  const noticeFile = join5(dataDir, "notice.json");
+  const noticeFile = join6(dataDir, "notice.json");
   const notice = readJson(noticeFile);
   if (notice && notice.problem === problem && now() - notice.at < NOTICE_INTERVAL_MS) return void 0;
   writeJson(noticeFile, { at: now(), problem });
@@ -7464,7 +7512,7 @@ function setupProblem(config2) {
   if (!config2.vaultRoot) {
     return "no vault is configured, so prompts are not routed. Run /duker-brain:init ~/brain --example, or set the vault folder in the plugin's settings.";
   }
-  if (!existsSync4(config2.vaultRoot)) {
+  if (!existsSync5(config2.vaultRoot)) {
     return `the vault folder ${config2.vaultRoot} does not exist. Run /duker-brain:init ${config2.vaultRoot} to create it.`;
   }
   if (config2.decisionsUrl.replace(/\/+$/, "") === JEV_URL && !config2.apiKey) {
@@ -7487,7 +7535,7 @@ function renderStatus(options = {}) {
       lines.push(`  config error: ${error2.message}`);
     }
   }
-  const breaker2 = readJson(join5(dataDir, "breaker.json"));
+  const breaker2 = readJson(join6(dataDir, "breaker.json"));
   if (breaker2 && now() < breaker2.downUntil) {
     const seconds = Math.ceil((breaker2.downUntil - now()) / 1e3);
     lines.push("", `Decisions service: paused for another ${seconds}s after repeated failures (${breaker2.reason ?? "unknown error"})`);
@@ -7503,8 +7551,8 @@ function resolveOptions(options) {
   return { env, dataDir, now: options.now ?? Date.now };
 }
 function defaultDataDir(env) {
-  const base = env.XDG_STATE_HOME?.trim() || join5(homedir3(), ".local", "state");
-  return join5(base, "brain-traverse", "claude-code");
+  const base = env.XDG_STATE_HOME?.trim() || join6(homedir3(), ".local", "state");
+  return join6(base, "brain-traverse", "claude-code");
 }
 function hookConfig(env, cwd) {
   const config2 = loadConfig({ env, cwd });
@@ -7545,16 +7593,16 @@ function fitToLimit(content, limit = MAX_CONTEXT_CHARS) {
 }
 function sessionPath(dataDir, sessionId) {
   const safe = (sessionId || "default").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 128);
-  return join5(dataDir, "sessions", `${safe}.json`);
+  return join6(dataDir, "sessions", `${safe}.json`);
 }
 function latestSession(dataDir) {
-  const dir = join5(dataDir, "sessions");
+  const dir = join6(dataDir, "sessions");
   let newest;
   try {
-    for (const name of readdirSync2(dir)) {
+    for (const name of readdirSync3(dir)) {
       if (!name.endsWith(".json")) continue;
-      const file = join5(dir, name);
-      const mtime = statSync5(file).mtimeMs;
+      const file = join6(dir, name);
+      const mtime = statSync6(file).mtimeMs;
       if (!newest || mtime > newest.mtime) newest = { file, mtime };
     }
   } catch {
@@ -7563,18 +7611,18 @@ function latestSession(dataDir) {
   return newest ? readJson(newest.file) : void 0;
 }
 function pruneSessions(dataDir, now) {
-  const dir = join5(dataDir, "sessions");
+  const dir = join6(dataDir, "sessions");
   try {
-    for (const name of readdirSync2(dir)) {
-      const file = join5(dir, name);
-      if (now - statSync5(file).mtimeMs > SESSION_TTL_MS) rmSync2(file, { force: true });
+    for (const name of readdirSync3(dir)) {
+      const file = join6(dir, name);
+      if (now - statSync6(file).mtimeMs > SESSION_TTL_MS) rmSync2(file, { force: true });
     }
   } catch {
   }
 }
 function readJson(file) {
   try {
-    return JSON.parse(readFileSync7(file, "utf8"));
+    return JSON.parse(readFileSync8(file, "utf8"));
   } catch {
     return void 0;
   }

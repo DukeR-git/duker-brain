@@ -10,7 +10,7 @@ var __export = (target, all) => {
 
 // pi-traverser/bin/brain-traverse.ts
 import { existsSync as existsSync6, readdirSync as readdirSync3, statSync as statSync6 } from "node:fs";
-import { join as join6, resolve as resolve7 } from "node:path";
+import { join as join6, resolve as resolve6 } from "node:path";
 
 // brain-core/src/cli.ts
 function parseArgs(argv, valueFlags, aliases = {}) {
@@ -291,7 +291,7 @@ function serialiseManifest(entries) {
 }
 
 // brain-core/src/routelog.ts
-import { appendFileSync, existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync5, renameSync as renameSync2, statSync as statSync4 } from "node:fs";
+import { appendFileSync, existsSync as existsSync3, mkdirSync, readFileSync as readFileSync5, renameSync as renameSync2, statSync as statSync4 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { dirname as dirname3, join as join4 } from "node:path";
 
@@ -358,7 +358,7 @@ var DEFAULT_TIMEOUT_MS = 2e3;
 var DEFAULT_ROUTE_BUDGET_MS = 3e3;
 
 // brain-core/src/vault.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync4, readdirSync, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync, statSync as statSync3 } from "node:fs";
 import { basename as basename2, extname, join as join3, resolve as resolve4 } from "node:path";
 
 // brain-core/src/frontmatter.ts
@@ -1193,12 +1193,12 @@ function describeConfig(config2, extra = {}) {
 
 // brain-core/src/traverser.ts
 import { readFileSync as readFileSync7 } from "node:fs";
-import { basename as basename3, resolve as resolve6 } from "node:path";
+import { basename as basename3, resolve as resolve5 } from "node:path";
 
 // brain-core/src/decisions-client.ts
 var MAX_BACKOFF_MS = 1e3;
 function sleep(ms) {
-  return new Promise((resolve8) => setTimeout(resolve8, ms));
+  return new Promise((resolve7) => setTimeout(resolve7, ms));
 }
 function parseRetryAfter(header) {
   if (!header) return void 0;
@@ -1296,24 +1296,6 @@ var DecisionsClient = class {
       clearTimeout(timer);
     }
   }
-  /** Single-choice convenience wrapper. */
-  async pickChoice(state, instructions, criteria) {
-    const outcome = await this.ask(state, {
-      route_selection: { type: "choice", instructions, criteria }
-    });
-    if (!outcome.ok) return outcome;
-    const answer = outcome.answers.route_selection;
-    if (!answer || answer.type !== "choice") {
-      return { ok: false, error: "no choice answer returned", latencyMs: outcome.latencyMs };
-    }
-    return {
-      ok: true,
-      choice: answer.choice,
-      confidence: choiceConfidence(answer),
-      probabilities: answer.probabilities,
-      latencyMs: outcome.latencyMs
-    };
-  }
   /** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
   async health() {
     const models = await this.probe("/v1/models");
@@ -1367,7 +1349,7 @@ import { existsSync as existsSync4, readdirSync as readdirSync2, readFileSync as
 import { join as join5 } from "node:path";
 var CACHE_FILE = ".brain.cache.json";
 var DEFAULT_MAX_CACHE_ENTRIES = 500;
-var CACHE_VERSION = 2;
+var CACHE_VERSION = 3;
 function normalizePrompt(prompt) {
   return prompt.toLowerCase().trim().replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").replace(/^[\s.,!?;:()"'`]+|[\s.,!?;:()"'`]+$/g, "");
 }
@@ -1376,35 +1358,54 @@ function hashPrompt(normalized) {
 }
 function computeVaultFingerprint(vaultRoot) {
   const records = [];
-  function scan(dir) {
+  const ignored = loadIgnore(vaultRoot);
+  function scan(dir, rel) {
     let entries;
     try {
-      entries = readdirSync2(dir);
+      entries = readdirSync2(dir, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const name of entries) {
-      if (name === ".git" || name === "node_modules" || name === ".trash" || name.startsWith(".")) {
-        continue;
-      }
+    for (const entry of entries) {
+      const name = entry.name;
+      if (name.startsWith(".") || name === "node_modules") continue;
+      const path = rel ? `${rel}/${name}` : name;
+      if (ignored(path)) continue;
       const full = join5(dir, name);
-      let st;
-      try {
-        st = statSync5(full);
-      } catch {
-        continue;
+      let isDirectory = entry.isDirectory();
+      if (entry.isSymbolicLink()) {
+        try {
+          isDirectory = statSync5(full).isDirectory();
+        } catch {
+          continue;
+        }
       }
-      if (st.isDirectory()) {
-        scan(full);
-      } else if (name === MANIFEST_FILE || name.endsWith(".md")) {
-        const rel = full.slice(vaultRoot.length).replace(/\\/g, "/");
-        records.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
+      if (isDirectory) {
+        scan(full, path);
+      } else if (name === MANIFEST_FILE) {
+        try {
+          const st = statSync5(full);
+          records.push(`${path}:${st.size}:${Math.floor(st.mtimeMs)}`);
+        } catch {
+        }
       }
     }
   }
-  scan(vaultRoot);
+  scan(vaultRoot, "");
   records.sort();
   return createHash2("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
+}
+function stampFiles(vaultRoot, result) {
+  const files = {};
+  for (const doc of result.documents ?? (result.document ? [result.document] : [])) {
+    try {
+      const st = statSync5(join5(vaultRoot, doc.path));
+      files[doc.path] = `${st.size}:${Math.floor(st.mtimeMs)}`;
+    } catch {
+      files[doc.path] = "";
+    }
+  }
+  return files;
 }
 var RouteCache = class {
   constructor(maxEntries = DEFAULT_MAX_CACHE_ENTRIES) {
@@ -1414,6 +1415,7 @@ var RouteCache = class {
   memory = /* @__PURE__ */ new Map();
   loadedVaultRoot = null;
   currentFingerprint = null;
+  fingerprintRoot = null;
   fingerprintMtime = 0;
   hits = 0;
   misses = 0;
@@ -1434,7 +1436,9 @@ ${norm}` : norm);
       this.misses++;
       return null;
     }
-    if (entry.fingerprint !== fp) {
+    const files = entry.files ?? {};
+    const fresh = stampFiles(vaultRoot, entry.result);
+    if (entry.fingerprint !== fp || Object.keys(fresh).some((path) => fresh[path] !== files[path])) {
       this.memory.delete(qHash);
       this.misses++;
       return null;
@@ -1460,7 +1464,7 @@ ${norm}` : norm);
     if (!norm) return;
     const qHash = hashPrompt(scope ? `${scope}
 ${norm}` : norm);
-    const fp = this.getOrUpdateFingerprint(vaultRoot);
+    const fp = this.currentFingerprint && this.fingerprintRoot === vaultRoot ? this.currentFingerprint : this.getOrUpdateFingerprint(vaultRoot);
     this.ensureLoaded(vaultRoot);
     if (this.memory.size >= this.maxEntries && !this.memory.has(qHash)) {
       const oldestKey = this.memory.keys().next().value;
@@ -1473,6 +1477,8 @@ ${norm}` : norm);
       queryHash: qHash,
       fingerprint: fp,
       result: JSON.parse(JSON.stringify(result)),
+      // shortcut: stamped after routing read the note, so an edit in those few ms is missed until the next one.
+      files: stampFiles(vaultRoot, result),
       createdAt: Date.now(),
       hits: 0
     };
@@ -1508,10 +1514,11 @@ ${norm}` : norm);
   }
   getOrUpdateFingerprint(vaultRoot) {
     const now = Date.now();
-    if (this.currentFingerprint && now - this.fingerprintMtime < 1500) {
+    if (this.currentFingerprint && this.fingerprintRoot === vaultRoot && now - this.fingerprintMtime < 1500) {
       return this.currentFingerprint;
     }
     this.currentFingerprint = computeVaultFingerprint(vaultRoot);
+    this.fingerprintRoot = vaultRoot;
     this.fingerprintMtime = now;
     return this.currentFingerprint;
   }
@@ -1724,7 +1731,7 @@ var BrainTraverser = class {
     if (this.config.gateEnabled && isTrivialFollowUp(state)) {
       return finish("skipped", "a short acknowledgement; no reference needed");
     }
-    const rootDir = resolve6(this.config.vaultRoot);
+    const rootDir = resolve5(this.config.vaultRoot);
     let loaded;
     try {
       loaded = this.manifests.load(rootDir);
@@ -1974,7 +1981,7 @@ var BrainTraverser = class {
     const setting = this.config.fallbackDocument;
     if (!setting) return finish(status, reason, { gate });
     if (setting !== "auto") {
-      const path = resolve6(this.config.vaultRoot, setting);
+      const path = resolve5(this.config.vaultRoot, setting);
       const document = isInsideVault(this.config.vaultRoot, path) ? this.readDocument(path, { id: "fallback", type: "leaf", criteria: "", targetPath: setting }) : null;
       if (!document) return finish(status, `${reason}; fallback '${setting}' not found`, { gate });
       return finish("fallback", reason, { document, gate });
@@ -1982,7 +1989,7 @@ var BrainTraverser = class {
     let manifests = visited;
     if (manifests.length === 0) {
       try {
-        const root = this.manifests.load(resolve6(this.config.vaultRoot));
+        const root = this.manifests.load(resolve5(this.config.vaultRoot));
         manifests = root ? [root] : [];
       } catch {
         manifests = [];
@@ -5021,7 +5028,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve8) {
+function isRecursive(inst, stack, resolve7) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -5031,7 +5038,7 @@ function isRecursive(inst, stack, resolve8) {
   let result = NONE;
   const check = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve8);
+      const answer = isRecursive(child, stack, resolve7);
       if (answer > result)
         result = answer;
     }
@@ -5042,7 +5049,7 @@ function isRecursive(inst, stack, resolve8) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve8) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve7) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -5106,7 +5113,7 @@ function isRecursive(inst, stack, resolve8) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve8 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve7 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -7989,6 +7996,9 @@ function parseYamlValue(val) {
 }
 
 // pi-traverser/src/inject.ts
+function resultDocuments(result) {
+  return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+}
 function formatSingleDocument(document, provenance, index) {
   const guideLabel = index ? `Reference Guide ${index.current}/${index.total}` : "Reference Guide";
   const header = [
@@ -8005,7 +8015,7 @@ ${document.content}
 ${footer}`;
 }
 function formatInjection(result) {
-  const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+  const docs = resultDocuments(result);
   if (docs.length === 0) return null;
   if (docs.length === 1) {
     const document = docs[0];
@@ -8027,7 +8037,7 @@ function formatTrace(result) {
   if (result.gate) parts.push(`gate=${result.gate.probability.toFixed(2)}`);
   if (hops) parts.push(hops);
   parts.push(`${Math.round(result.totalMs)}ms total`);
-  const docs = result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+  const docs = resultDocuments(result);
   if (docs.length > 1) {
     parts.push(docs.map((d) => d.path).join(" + "));
   } else if (docs.length === 1) {
@@ -8175,7 +8185,7 @@ function walkManifests(root) {
 async function cmdLint(args) {
   const config2 = configFrom(args);
   if (!requireVault(config2)) return 2;
-  const root = resolve7(config2.vaultRoot);
+  const root = resolve6(config2.vaultRoot);
   const store = new ManifestStore(root, false);
   const dirs = walkManifests(root);
   let errors = 0;
@@ -8246,7 +8256,7 @@ async function cmdLint(args) {
   }
   if (config2.fallbackDocument && config2.fallbackDocument !== "auto") {
     try {
-      statSync6(resolve7(root, config2.fallbackDocument));
+      statSync6(resolve6(root, config2.fallbackDocument));
     } catch {
       warn(`fallback document '${config2.fallbackDocument}' does not exist`);
     }
@@ -8337,7 +8347,7 @@ async function cmdEval(args) {
       return 2;
     }
   }
-  const resolvedPath = resolve7(evalPath);
+  const resolvedPath = resolve6(evalPath);
   let suite;
   try {
     suite = loadEvalSuite(resolvedPath);

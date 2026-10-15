@@ -200,7 +200,7 @@ function deriveGlobs(relPath: string): string {
 		return "**/*.tsx, **/*.jsx, **/*.vue, **/*.svelte, **/*.css, **/*.html";
 	}
 	if (lower.includes("infra") || lower.includes("docker") || lower.includes("deploy")) {
-		return "**/Dockerfile*, **/docker-compose*, **/*.ya?ml, **/*.sh";
+		return "**/Dockerfile*, **/docker-compose*, **/*.yaml, **/*.yml,**/*.sh";
 	}
 	return "**/*";
 }

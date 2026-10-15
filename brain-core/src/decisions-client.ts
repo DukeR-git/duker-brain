@@ -167,33 +167,6 @@ export class DecisionsClient {
 		}
 	}
 
-	/** Single-choice convenience wrapper. */
-	async pickChoice(
-		state: string,
-		instructions: string,
-		criteria: Record<string, string>,
-	): Promise<
-		| { ok: true; choice: string; confidence: number; probabilities?: Record<string, number>; latencyMs: number }
-		| { ok: false; error: string; latencyMs: number }
-	> {
-		const outcome = await this.ask(state, {
-			route_selection: { type: "choice", instructions, criteria },
-		});
-		if (!outcome.ok) return outcome;
-
-		const answer = outcome.answers.route_selection;
-		if (!answer || answer.type !== "choice") {
-			return { ok: false, error: "no choice answer returned", latencyMs: outcome.latencyMs };
-		}
-		return {
-			ok: true,
-			choice: answer.choice,
-			confidence: choiceConfidence(answer),
-			probabilities: answer.probabilities,
-			latencyMs: outcome.latencyMs,
-		};
-	}
-
 	/** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
 	async health(): Promise<ServiceHealth> {
 		const models = await this.probe("/v1/models");

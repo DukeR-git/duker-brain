@@ -151,20 +151,6 @@ export function envString(
 	return value === undefined || value.trim() === "" ? fallback : value.trim();
 }
 
-export function envNumber(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
-	const raw = env[key];
-	if (raw === undefined || raw.trim() === "") return fallback;
-	const value = Number(raw);
-	// A typo should not silently become NaN and disable a threshold.
-	return Number.isFinite(value) ? value : fallback;
-}
-
-export function envBoolean(env: NodeJS.ProcessEnv, key: string, fallback: boolean): boolean {
-	const raw = env[key];
-	if (raw === undefined || raw.trim() === "") return fallback;
-	return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
-}
-
 /** Per-request timeout: past this the agent proceeds without a guide rather than stall. */
 export const DEFAULT_TIMEOUT_MS = 2000;
 /** Budget for a whole route, every hop and retry included. */

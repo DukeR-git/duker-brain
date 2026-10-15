@@ -67,9 +67,8 @@ describe("requests", () => {
 	it("sends the configured model and the bearer key", async () => {
 		mock.behaviour = { jevKey: "sk-test" };
 		mock.requests.length = 0;
-		const outcome = await client({ apiKey: "sk-test", model: "jev-preview" }).pickChoice("state", "pick", {
-			a: "first",
-			b: "second",
+		const outcome = await client({ apiKey: "sk-test", model: "jev-preview" }).ask("state", {
+			route_selection: { type: "choice", instructions: "pick", criteria: { a: "first", b: "second" } },
 		});
 		assert.equal(outcome.ok, true);
 		assert.equal(mock.requests[0].model, "jev-preview");
@@ -79,7 +78,7 @@ describe("requests", () => {
 	it("defaults the model to jev-latest", async () => {
 		mock.behaviour = {};
 		mock.requests.length = 0;
-		await client().pickChoice("state", "pick", { a: "first", b: "second" });
+		await client().ask("state", { route_selection: { type: "choice", instructions: "pick", criteria: { a: "first", b: "second" } } });
 		assert.equal(mock.requests[0].model, "jev-latest");
 	});
 });

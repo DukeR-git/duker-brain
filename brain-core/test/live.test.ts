@@ -37,17 +37,20 @@ describe("live decisions service", { skip: url ? false : "set BRAIN_LIVE_URL to 
 	});
 
 	it("answers a choice with one of the offered labels", async () => {
-		const outcome = await client.pickChoice(
-			"How do I configure connection pooling for asyncpg in FastAPI?",
-			"Select the reference manual most relevant to the developer prompt.",
-			{
-				fastapi_core: "FastAPI routing, request lifecycle, middleware, and dependency injection",
-				asyncpg_pooling: "PostgreSQL database connections, asyncpg pools, and session management",
-				docker_deploy: "Dockerfile setups, container networking, and compose files",
+		const outcome = await client.ask("How do I configure connection pooling for asyncpg in FastAPI?", {
+			route_selection: {
+				type: "choice",
+				instructions: "Select the reference manual most relevant to the developer prompt.",
+				criteria: {
+					fastapi_core: "FastAPI routing, request lifecycle, middleware, and dependency injection",
+					asyncpg_pooling: "PostgreSQL database connections, asyncpg pools, and session management",
+					docker_deploy: "Dockerfile setups, container networking, and compose files",
+				},
 			},
-		);
+		});
 		assert.ok(outcome.ok, outcome.ok ? "" : outcome.error);
-		if (outcome.ok) assert.ok(["fastapi_core", "asyncpg_pooling", "docker_deploy"].includes(outcome.choice));
+		const answer = outcome.ok ? outcome.answers.route_selection : undefined;
+		assert.ok(answer?.type === "choice" && ["fastapi_core", "asyncpg_pooling", "docker_deploy"].includes(answer.choice));
 	});
 
 	it("routes through the fixture vault end to end", async () => {

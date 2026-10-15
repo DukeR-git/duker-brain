@@ -195,9 +195,12 @@ export default function brainTraverse(pi: PiExtensionAPI, options: ExtensionOpti
 		}
 	};
 
-	/** Start a background probe if one is due; the current prompt does not wait for it. */
+	/**
+	 * Start a background probe if one is due; the current prompt does not wait for it.
+	 * "unknown" counts as due: without a session_start nothing else would ever probe.
+	 */
 	const maybeReprobe = () => {
-		if (health !== "down" || now() < nextProbeAt || probing) return;
+		if (health === "up" || now() < nextProbeAt || probing) return;
 		probing = probe().finally(() => {
 			probing = undefined;
 		});

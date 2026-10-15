@@ -355,8 +355,8 @@ export function addBrain(options: AddOptions): AddResult {
 				writeInto(target, "_about.md", about.generated);
 				hashes["_about.md"] = sha1(about.generated);
 			}
-			result.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
 
+			// Recorded before evals.json is touched, so a failure there cannot orphan the notes.
 			record.brains[folder] = {
 				source: source.spec,
 				kind: source.kind,
@@ -368,6 +368,7 @@ export function addBrain(options: AddOptions): AddResult {
 				files: hashes,
 			};
 			writeSources(options.vaultRoot, record);
+			result.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
 			return compileVault(options.vaultRoot);
 		});
 		return result;
@@ -417,17 +418,19 @@ function writeInto(target: string, file: string, content: string): void {
 function mergeEvals(vaultRoot: string, folder: string, brainDir: string): number {
 	const incoming = join(brainDir, EVALS_FILE);
 	const file = join(vaultRoot, EVALS_FILE);
-	let suite: { version?: number; evals?: { id: string }[] } = { version: 1, evals: [] };
+	let suite: { version?: number; evals?: { id?: unknown }[] } = { version: 1, evals: [] };
 	if (existsSync(file)) {
 		try {
 			suite = JSON.parse(readFileSync(file, "utf8"));
 		} catch {
 			return 0; // leave a file we cannot read alone
 		}
+		// Likewise one that is not the shape we write: rewriting it would lose what is there.
+		if (!suite || typeof suite !== "object" || Array.isArray(suite) || !Array.isArray(suite.evals ?? [])) return 0;
 	}
 	const prefix = `${folder}/`;
-	const kept = (suite.evals ?? []).filter((entry) => !entry.id.startsWith(prefix));
-	let added: { id: string }[] = [];
+	const kept = (suite.evals ?? []).filter((entry) => !(typeof entry?.id === "string" && entry.id.startsWith(prefix)));
+	let added: { id?: unknown }[] = [];
 	if (existsSync(incoming)) {
 		try {
 			const theirs = JSON.parse(readFileSync(incoming, "utf8")) as { evals?: { id: string }[] };
@@ -538,7 +541,6 @@ export function updateBrains(options: UpdateOptions): UpdateResult {
 					if (!upstream.has(file) && file !== "_about.md") update.removedUpstream.push(file);
 				}
 				if (!dryRun) {
-					update.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
 					record.brains[folder] = {
 						...installed,
 						commit: fetched.commit,
@@ -546,6 +548,7 @@ export function updateBrains(options: UpdateOptions): UpdateResult {
 						updatedAt: (options.now?.() ?? new Date()).toISOString(),
 						files: hashes,
 					};
+					update.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
 				}
 			} catch (error) {
 				update.error = (error as Error).message;
