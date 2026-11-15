@@ -48,6 +48,7 @@ describe("the tool surface", () => {
 			"brain_tree",
 			"brain_get_note",
 			"brain_search",
+			"brain_route",
 			"brain_doctor",
 			"brain_check_routing",
 			"brain_eval",
@@ -247,6 +248,33 @@ describe("capture and maintenance flow", () => {
 		const result = await call(root, "brain_rebuild", { dryRun: true });
 		assert.match(result.text, /1 manifest\(s\) would change/);
 		assert.equal(readFileSync(join(root, "Backend", "_index.json"), "utf8"), "[]");
+	});
+});
+
+describe("brain_route", () => {
+	const prompt = "How do I configure connection pooling for asyncpg in FastAPI?";
+
+	it("returns the body of the note the prompt routes to", async () => {
+		mock.behaviour = {};
+		const result = await call(vault(), "brain_route", { prompt });
+		assert.ok(!result.isError);
+		assert.match(result.text, /\[Reference Guide: asyncpg Connection Pooling\]/);
+		assert.match(result.text, /Source: Backend\/asyncpg_pooling\.md/);
+		assert.match(result.text, /Create one pool in the FastAPI lifespan/);
+	});
+
+	it("honours the gate, unlike the placement check", async () => {
+		mock.behaviour = { gate: 0.01 };
+		const result = await call(vault(), "brain_route", { prompt: "thanks, that worked" });
+		assert.ok(!result.isError);
+		assert.match(result.text, /^No guide for this prompt \(skipped\)/);
+		mock.behaviour = {};
+	});
+
+	it("says the service is down rather than returning nothing", async () => {
+		const result = await call(vault(), "brain_route", { prompt }, { decisionsUrl: "http://127.0.0.1:1", timeoutMs: 200, retries: 0 });
+		assert.equal(result.isError, true);
+		assert.match(result.text, /self-hosted service is running/);
 	});
 });
 

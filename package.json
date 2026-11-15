@@ -39,8 +39,8 @@
     ]
   },
   "bin": {
-    "brain-keeper": "./brain-keeper/bin/brain-keeper.mjs",
-    "brain-traverse": "./pi-traverser/bin/brain-traverse.mjs"
+    "brain-keeper": "./dist/brain-keeper.mjs",
+    "brain-traverse": "./dist/brain-traverse.mjs"
   },
   "scripts": {
     "build": "node scripts/build.mjs",

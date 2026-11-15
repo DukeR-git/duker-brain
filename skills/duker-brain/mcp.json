@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "brain": {
+      "command": "npx",
+      "args": ["-y", "--package=github:DukeR-git/duker-brain", "brain-keeper", "serve"],
+      "env": {
+        "BRAIN_VAULT_ROOT": "/absolute/path/to/your/vault",
+        "TYPESAFE_API_KEY": "<your key from console.typesafe.ai/keys>"
+      }
+    }
+  }
+}

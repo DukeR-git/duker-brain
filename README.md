@@ -32,7 +32,7 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
   extension. It routes each prompt through the vault and adds the matching note
   to the conversation. Supports parallel composite
   routing for cross-cutting queries under a unified context budget.
-- **Keeper**: 17 `brain_*` tools for adding to, searching, maintaining, evaluating and
+- **Keeper**: 18 `brain_*` tools for adding to, searching, maintaining, evaluating and
   exporting the brain, plus commands to capture and research knowledge into it. They
   are native tools in Pi, and an MCP server for Claude Code, Codex and any other MCP client.
 - **Decision model**: picks the note at each step. The hosted
@@ -103,7 +103,7 @@ starting from the Python backend starter, and check that routing works:
 From then on every prompt is routed, and the matching note is added as context.
 When a note goes in, Claude Code shows one line such as
 `brain: asyncpg_pooling 0.93 53ms`; set `displayInjection` to `false` to hide
-it. You also get the 17 `brain_*` tools and these commands:
+it. You also get the 18 `brain_*` tools and these commands:
 
 | Command | What it does |
 |---|---|
@@ -126,7 +126,7 @@ pi install git:github.com/DukeR-git/duker-brain
 export TYPESAFE_API_KEY=sk-...   # or, self-hosted: export BRAIN_DECISIONS_URL=http://my-server:8081
 ```
 
-That installs the router, the 17 brain tools, and the `/brain`,
+That installs the router, the 18 brain tools, and the `/brain`,
 `/brain-init`, `/brain-add`, `/brain-update`, `/brain-capture`, `/brain-research`
 and `/brain-export` commands. Then create a brain from inside Pi and reload:
 
@@ -150,7 +150,51 @@ what the notes still need.
 ### Codex and other MCP clients
 
 These harnesses get the keeper: the tools and the two commands. Automatic
-routing on every prompt is available for Claude Code (above) and Pi.
+routing on every prompt is available for Claude Code (above) and Pi; everywhere
+else the agent asks for the note itself with the `brain_route` tool, and the
+[duker-brain skill](skills/duker-brain/SKILL.md) tells it when to.
+
+#### Without cloning
+
+You need Node.js 22 or newer and git. Create a brain (or adopt an Obsidian
+vault you already have) once, in a terminal:
+
+```bash
+npx -y --package=github:DukeR-git/duker-brain brain-keeper init ~/brain --starter python-backend
+```
+
+Then add the server to your client's MCP config (`mcp.json`,
+`.cursor/mcp.json`, `.vscode/mcp.json`, …). This is
+[skills/duker-brain/mcp.json](skills/duker-brain/mcp.json):
+
+```json
+{
+  "mcpServers": {
+    "brain": {
+      "command": "npx",
+      "args": ["-y", "--package=github:DukeR-git/duker-brain", "brain-keeper", "serve"],
+      "env": {
+        "BRAIN_VAULT_ROOT": "/absolute/path/to/your/vault",
+        "TYPESAFE_API_KEY": "<your key from console.typesafe.ai/keys>"
+      }
+    }
+  }
+}
+```
+
+`npx` fetches the repository and runs the prebuilt bundle from [dist](dist).
+The first run takes a while, which is one more reason to run `init` first: it
+warms the cache, so the client does not time out waiting for the server.
+`BRAIN_VAULT_ROOT` can be left out when `init` saved the vault, and the key
+when you set `BRAIN_DECISIONS_URL` to a self-hosted service that does not check
+one. On Windows, clients that cannot launch `npx` directly need
+`"command": "cmd"` and `"args": ["/c", "npx", "-y", …]`.
+
+Copy the [skills/duker-brain](skills/duker-brain) folder to wherever your agent
+reads skills from, so it queries the brain before answering and follows the
+vault's authoring rules when it writes notes.
+
+#### From a checkout
 
 ```bash
 git clone https://github.com/DukeR-git/duker-brain
@@ -317,7 +361,7 @@ npm run build       # rebuild the self-contained dist/ bundles (commit the resul
 ```
 brain-core     169   vault model, compiler, config, traversal, cache, evals, exporter
 pi-traverser    71   the Pi extension, the Claude Code hook, injection formatting, config, CLI
-brain-keeper   110   operations, the 17-tool surface, shared brains, Pi registration, MCP server
+brain-keeper   113   operations, the 18-tool surface, shared brains, Pi registration, MCP server
 ```
 
 None of the tests need a network or an API key: a mock server imitates Jev,

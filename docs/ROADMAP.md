@@ -14,9 +14,10 @@ routing. See [CHANGELOG.md](../CHANGELOG.md).
 
 - **Automatic routing in Codex** and other harnesses with a prompt hook, reusing
   the Claude Code hook (`pi-traverser/src/claude-hook.ts`).
-- **Installable without cloning.** Publish to npm so MCP users can run
-  `npx brain-keeper serve`. The self-contained `dist/` bundles can be the
-  published entry points.
+- **Publish to npm.** `npx` already runs the server from GitHub without a
+  clone (`npx --package=github:DukeR-git/duker-brain brain-keeper serve`);
+  publishing would shorten that to `npx brain-keeper serve` and skip the
+  slow first fetch.
 - **Linting and formatting** for the TypeScript (Biome, or ESLint and Prettier),
   enforced in CI.
 

@@ -25,7 +25,15 @@ export interface RoutingCheck {
 	matched?: boolean;
 }
 
-export function createTraverser(config: KeeperConfig, vaultRoot: string): BrainTraverser {
+/**
+ * `placement` (the default) is the authoring check described below; `route` is
+ * the router exactly as configured, gate, fallback and full note body included.
+ */
+export function createTraverser(
+	config: KeeperConfig,
+	vaultRoot: string,
+	mode: "placement" | "route" = "placement",
+): BrainTraverser {
 	const logger = new Logger(config.logLevel);
 	const client = new DecisionsClient({
 		baseUrl: config.decisionsUrl,
@@ -41,6 +49,9 @@ export function createTraverser(config: KeeperConfig, vaultRoot: string): BrainT
 	// that make the check about *placement*: no gate (the question is where a
 	// prompt lands, not whether a guide is wanted), no fallback (a fallback is
 	// not the note you meant to reach), and the document body is not needed.
+	// A traverser lives for one call here, so there is nothing to watch.
+	if (mode === "route") return new BrainTraverser({ ...config, vaultRoot, watchManifests: false }, client, logger);
+
 	const options: TraverserOptions = {
 		vaultRoot,
 		maxHops: config.maxHops,
@@ -137,4 +148,30 @@ export function renderRoutingChecks(checks: RoutingCheck[]): string {
 	}
 
 	return lines.join("\n").trimEnd();
+}
+
+/** The routed note(s) as the text an agent reads, or why there is none. */
+export function renderRoute(result: TraversalResult): string {
+	const docs = result.documents?.length ? result.documents : result.document ? [result.document] : [];
+	if (docs.length === 0) return `No guide for this prompt (${result.status}): ${result.reason}`;
+
+	return docs
+		.map((doc) => {
+			const provenance =
+				result.status === "fallback"
+					? `catch-all guide (${result.reason})`
+					: `${doc.trail ?? result.trail}, confidence ${(doc.confidence ?? result.minConfidence).toFixed(2)}`;
+			return [
+				`[Reference Guide: ${doc.title}]`,
+				`Source: ${doc.path} — ${provenance}`,
+				"Background reference selected for the prompt. Use it where it applies; ignore it if it is not about what was asked.",
+				"",
+				doc.content,
+				"",
+				doc.truncated
+					? `[End Reference Guide — truncated: ${doc.content.length} of ${doc.originalLength} characters; brain_get_note has the rest]`
+					: "[End Reference Guide]",
+			].join("\n");
+		})
+		.join("\n\n");
 }

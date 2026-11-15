@@ -62,7 +62,7 @@ describe("brain-keeper serve", () => {
 	it("lists every tool with read/write annotations", async () => {
 		const responses = await rpc(environment({ BRAIN_VAULT_ROOT: fixtureCopy() }), [...INIT, { id: 2, method: "tools/list" }]);
 		const tools = responses.get(2).result.tools as { name: string; annotations: Record<string, boolean> }[];
-		assert.equal(tools.length, 17);
+		assert.equal(tools.length, 18);
 		const byName = new Map(tools.map((tool) => [tool.name, tool]));
 		assert.equal(byName.get("brain_tree")!.annotations.readOnlyHint, true);
 		assert.equal(byName.get("brain_remove_note")!.annotations.destructiveHint, true);

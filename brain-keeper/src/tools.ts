@@ -18,7 +18,7 @@ import { findNode, scanVault } from "../../brain-core/src/vault.js";
 import { requireVault, type KeeperConfig } from "./config.js";
 import * as ops from "./operations.js";
 import { renderChangeSet, renderIssues, renderSearch, renderTree } from "./report.js";
-import { checkRouting, createTraverser, renderRoutingChecks } from "./routing.js";
+import { checkRouting, createTraverser, renderRoute, renderRoutingChecks } from "./routing.js";
 
 export interface ToolResult {
 	text: string;
@@ -204,6 +204,35 @@ const brainDoctor = defineTool({
 	},
 });
 
+/** What to do when the decisions service cannot be reached. */
+function serviceFix(config: KeeperConfig): string {
+	return config.decisionsUrl.replace(/\/+$/, "") !== JEV_URL
+		? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key."
+		: config.apiKey
+			? "Check the API key (brain-traverse health says what is wrong)."
+			: "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
+}
+
+const brainRoute = defineTool({
+	name: "brain_route",
+	description:
+		"Fetch the reference note that applies to a prompt: the routing Pi and the Claude Code plugin do " +
+		"automatically, as a tool for every other client. Call it with the user's request before answering anything " +
+		"specific to this project or its domain, and use the note it returns as background. Returns the note body " +
+		"(two for a cross-cutting prompt), or says that no guide applies. Requires the decisions service. " +
+		"To test where prompts land while editing the brain, use brain_check_routing instead.",
+	mutates: false,
+	openWorld: true,
+	schema: z.object({
+		prompt: z.string().trim().min(1).describe("The user's question or task, in their own words."),
+	}),
+	async run(config, input) {
+		const result = await createTraverser(config, requireVault(config), "route").route(input.prompt);
+		if (result.status !== "error") return ok(renderRoute(result));
+		return { text: `${renderRoute(result)}\n\n${serviceFix(config)}`, isError: true };
+	},
+});
+
 const brainCheckRouting = defineTool({
 	name: "brain_check_routing",
 	description:
@@ -229,14 +258,8 @@ const brainCheckRouting = defineTool({
 		const allFailed = checks.every((check) => check.result.status === "error");
 		if (!allFailed) return ok(renderRoutingChecks(checks));
 
-		const fix =
-			config.decisionsUrl.replace(/\/+$/, "") !== JEV_URL
-				? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key."
-				: config.apiKey
-					? "Check the API key (brain-traverse health says what is wrong)."
-					: "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
 		return {
-			text: `${renderRoutingChecks(checks)}\n\nEvery check failed to reach the decisions service at ${config.decisionsUrl}. ${fix}`,
+			text: `${renderRoutingChecks(checks)}\n\nEvery check failed to reach the decisions service at ${config.decisionsUrl}. ${serviceFix(config)}`,
 			isError: true,
 		};
 	},
@@ -468,6 +491,7 @@ export const TOOLS: ToolDefinition[] = [
 	brainTree,
 	brainGetNote,
 	brainSearch,
+	brainRoute,
 	brainDoctor,
 	brainCheckRouting,
 	brainEval,

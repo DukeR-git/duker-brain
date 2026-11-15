@@ -1,7 +1,7 @@
 {
   "name": "duker-brain",
   "version": "1.2.0",
-  "description": "Dynamic context routing: on every prompt a fast decision model walks your Obsidian vault and adds only the note that applies. Plus 17 brain_* tools for building and maintaining the vault.",
+  "description": "Dynamic context routing: on every prompt a fast decision model walks your Obsidian vault and adds only the note that applies. Plus 18 brain_* tools for building and maintaining the vault.",
   "author": {
     "name": "DukeR-git",
     "url": "https://github.com/DukeR-git"

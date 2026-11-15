@@ -6,6 +6,25 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`brain_route`**: the router as a tool. It returns the note that applies to
+  a prompt, body included, with the same settings as automatic routing, so
+  Codex, Cursor and other MCP clients can ask for context themselves.
+- **A skill** ([skills/duker-brain](skills/duker-brain/SKILL.md)) that tells an
+  agent to query the brain before answering project questions, to follow the
+  vault's authoring rules, and to run `brain_doctor` or `brain_rebuild` after
+  writing.
+- **Setup without cloning** for MCP clients: an `mcp.json` that runs the server
+  with `npx` from GitHub.
+
+### Changed
+
+- The package's `brain-keeper` and `brain-traverse` commands (`npx`,
+  `npm link`) now run the prebuilt bundles in `dist/`, which need nothing
+  installed. From a checkout, `node brain-keeper/bin/brain-keeper.mjs` still
+  runs the source.
+
 ### Removed
 
 - **host-laya.** The repository is now the Claude Code plugin and Pi package

@@ -22,14 +22,16 @@ agent ──tools / MCP──> brain-keeper ──> Obsidian vault (.md + _about
 ### Pi
 
 Nothing extra: `pi install git:github.com/DukeR-git/duker-brain` (see the
-[root README](../README.md#pi)) registers all 17 tools natively, along with
+[root README](../README.md#pi)) registers all 18 tools natively, along with
 `/brain-capture`, `/brain-research`, `/brain-export`, `/brain-init`, `/brain-add` and
 `/brain-update`. `/brain-init ~/brain` creates a vault and makes it the default;
 `--starter python-backend` adds a starter brain to it, and `--dry-run` previews it.
 
 ### Claude Code, Codex and other MCP clients
 
-From a checkout of the repository:
+Without a checkout, `npx` can run the server straight from GitHub: see
+[Without cloning](../README.md#without-cloning) in the root README. From a
+checkout of the repository:
 
 ```bash
 npm install                                            # at the repository root
@@ -109,7 +111,7 @@ Then install the commands; see [commands/README.md](commands/README.md).
 
 ## 3. The tools
  
-Eleven write, six read. Descriptions are written for the model that has to decide
+Eleven write, seven read. Descriptions are written for the model that has to decide
 which one to call. Over MCP each tool also carries annotations — read-only,
 destructive, idempotent, open-world — so a harness can auto-approve the reads
 and ask before a removal.
@@ -119,6 +121,7 @@ and ask before a removal.
 | `brain_tree` | r | Structure, child counts, which folders are over the routing limit |
 | `brain_get_note` | r | One note (or a folder's `_about.md`): frontmatter and body. Markdown only. |
 | `brain_search` | r | Keyword search over titles, criteria and bodies — "is this already in the brain?" |
+| `brain_route` | r | The note that applies to a prompt, body included: the router as a tool, for clients without automatic routing |
 | `brain_doctor` | r | Health report — every problem with the action that fixes it |
 | `brain_check_routing` | r | Where do these prompts actually land, with the router's own settings? |
 | `brain_eval` | r | Run routing regression evals against the vault with accuracy & latency metrics |

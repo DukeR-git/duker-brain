@@ -10157,7 +10157,7 @@ var init_report = __esm({
 });
 
 // brain-keeper/src/routing.ts
-function createTraverser(config2, vaultRoot) {
+function createTraverser(config2, vaultRoot, mode = "placement") {
   const logger = new Logger(config2.logLevel);
   const client = new DecisionsClient({
     baseUrl: config2.decisionsUrl,
@@ -10168,6 +10168,7 @@ function createTraverser(config2, vaultRoot) {
     retries: config2.retries,
     logger
   });
+  if (mode === "route") return new BrainTraverser({ ...config2, vaultRoot, watchManifests: false }, client, logger);
   const options = {
     vaultRoot,
     maxHops: config2.maxHops,
@@ -10226,6 +10227,22 @@ function renderRoutingChecks(checks) {
   }
   return lines.join("\n").trimEnd();
 }
+function renderRoute(result) {
+  const docs = result.documents?.length ? result.documents : result.document ? [result.document] : [];
+  if (docs.length === 0) return `No guide for this prompt (${result.status}): ${result.reason}`;
+  return docs.map((doc) => {
+    const provenance = result.status === "fallback" ? `catch-all guide (${result.reason})` : `${doc.trail ?? result.trail}, confidence ${(doc.confidence ?? result.minConfidence).toFixed(2)}`;
+    return [
+      `[Reference Guide: ${doc.title}]`,
+      `Source: ${doc.path} \u2014 ${provenance}`,
+      "Background reference selected for the prompt. Use it where it applies; ignore it if it is not about what was asked.",
+      "",
+      doc.content,
+      "",
+      doc.truncated ? `[End Reference Guide \u2014 truncated: ${doc.content.length} of ${doc.originalLength} characters; brain_get_note has the rest]` : "[End Reference Guide]"
+    ].join("\n");
+  }).join("\n\n");
+}
 var init_routing = __esm({
   "brain-keeper/src/routing.ts"() {
     "use strict";
@@ -10256,6 +10273,9 @@ function ok(text) {
 function defineTool(definition) {
   return definition;
 }
+function serviceFix(config2) {
+  return config2.decisionsUrl.replace(/\/+$/, "") !== JEV_URL ? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key." : config2.apiKey ? "Check the API key (brain-traverse health says what is wrong)." : "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
+}
 function findTool(name) {
   return TOOLS.find((tool) => tool.name === name);
 }
@@ -10272,7 +10292,7 @@ async function runTool(tool, config2, input) {
     return { text: `${tool.name} failed: ${error2.message}`, isError: true };
   }
 }
-var CRITERIA_HELP, opts, brainTree, brainGetNote, brainSearch, brainDoctor, brainCheckRouting, brainAddNote, brainUpdateNote, brainMoveNote, brainRemoveNote, brainAddBranch, brainUpdateBranch, brainMoveBranch, brainRemoveBranch, brainSplitBranch, brainRebuild, brainEval, brainExport, TOOLS;
+var CRITERIA_HELP, opts, brainTree, brainGetNote, brainSearch, brainDoctor, brainRoute, brainCheckRouting, brainAddNote, brainUpdateNote, brainMoveNote, brainRemoveNote, brainAddBranch, brainUpdateBranch, brainMoveBranch, brainRemoveBranch, brainSplitBranch, brainRebuild, brainEval, brainExport, TOOLS;
 var init_tools = __esm({
   "brain-keeper/src/tools.ts"() {
     "use strict";
@@ -10385,6 +10405,22 @@ var init_tools = __esm({
         return ok(lines.join("\n"));
       }
     });
+    brainRoute = defineTool({
+      name: "brain_route",
+      description: "Fetch the reference note that applies to a prompt: the routing Pi and the Claude Code plugin do automatically, as a tool for every other client. Call it with the user's request before answering anything specific to this project or its domain, and use the note it returns as background. Returns the note body (two for a cross-cutting prompt), or says that no guide applies. Requires the decisions service. To test where prompts land while editing the brain, use brain_check_routing instead.",
+      mutates: false,
+      openWorld: true,
+      schema: object({
+        prompt: string2().trim().min(1).describe("The user's question or task, in their own words.")
+      }),
+      async run(config2, input) {
+        const result = await createTraverser(config2, requireVault(config2), "route").route(input.prompt);
+        if (result.status !== "error") return ok(renderRoute(result));
+        return { text: `${renderRoute(result)}
+
+${serviceFix(config2)}`, isError: true };
+      }
+    });
     brainCheckRouting = defineTool({
       name: "brain_check_routing",
       description: "Ask the live router where prompts land, using the same traversal and the same settings the coding agent uses at prompt time. This is how you verify a new note is reachable and that criteria edits worked. Supply `expected` to assert a prompt should reach a specific note. Requires the decisions service.",
@@ -10403,11 +10439,10 @@ var init_tools = __esm({
         const checks = await checkRouting(config2, vault, input.prompts);
         const allFailed = checks.every((check) => check.result.status === "error");
         if (!allFailed) return ok(renderRoutingChecks(checks));
-        const fix = config2.decisionsUrl.replace(/\/+$/, "") !== JEV_URL ? "Check that the self-hosted service is running (brain-traverse health), and set BRAIN_DECISIONS_API_KEY if it asks for a key." : config2.apiKey ? "Check the API key (brain-traverse health says what is wrong)." : "Set TYPESAFE_API_KEY (or BRAIN_DECISIONS_API_KEY) in this server's environment.";
         return {
           text: `${renderRoutingChecks(checks)}
 
-Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${fix}`,
+Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${serviceFix(config2)}`,
           isError: true
         };
       }
@@ -10589,6 +10624,7 @@ Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${
       brainTree,
       brainGetNote,
       brainSearch,
+      brainRoute,
       brainDoctor,
       brainCheckRouting,
       brainEval,
