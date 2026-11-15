@@ -1,12 +1,12 @@
-# brain-traverse
+# duker-brain
 
 [![CI](https://github.com/DukeR-git/duker-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/DukeR-git/duker-brain/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
 
-Dynamic context routing for Claude Code and Pi. Your knowledge lives in a
+Dynamic context routing for coding agents. Your knowledge lives in a
 hierarchical Obsidian vault, "the brain". On every prompt, a fast decision
-model walks that tree and injects only the note that applies, not one
+model walks that tree and adds only the note that applies, instead of one
 enormous system prompt.
 
 Two hops, typically well under a second, and the agent sees the one guide it needs.
@@ -28,13 +28,15 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
                                          └──────────────────┘
 ```
 
-- **Router**: a [Claude Code](https://code.claude.com) plugin hook and a [Pi](https://pi.dev)
-  extension. It routes each prompt through the vault and adds the matching note
-  to the conversation. Supports parallel composite
-  routing for cross-cutting queries under a unified context budget.
-- **Keeper**: 18 `brain_*` tools for adding to, searching, maintaining, evaluating and
-  exporting the brain, plus commands to capture and research knowledge into it. They
-  are native tools in Pi, and an MCP server for Claude Code, Codex and any other MCP client.
+- **Router**: a [Claude Code](https://code.claude.com) plugin hook and a
+  [Pi](https://pi.dev) extension. It routes each prompt through the vault and
+  adds the matching note to the conversation, or two notes when a prompt spans
+  two topics. Other MCP clients call the same router as a tool, `brain_route`.
+- **Keeper**: 18 `brain_*` tools for adding to, searching, maintaining,
+  evaluating and exporting the brain ([the list](brain-keeper/README.md#3-the-tools)),
+  plus commands to capture and research knowledge into it. They are native
+  tools in Pi, and an MCP server for Claude Code, Codex, Cursor and any other
+  MCP client.
 - **Decision model**: picks the note at each step. The hosted
   [TypeSafe Jev](https://docs.typesafe.ai) API by default, which needs only an
   API key, or your own service with the same API. See
@@ -42,43 +44,19 @@ Two hops, typically well under a second, and the agent sees the one guide it nee
 - **Starter brains**: ready-made notes you can add in one command, and a way to
   share your own brain through GitHub. See [Starter and shared brains](#starter-and-shared-brains).
 
----
-
-## The decision model
-
-At each folder of the brain, a decision model reads the prompt and the
-`criteria` of the notes and subfolders there, and picks one. Use either:
-
-- **TypeSafe Jev** (the default): the hosted [Jev](https://docs.typesafe.ai)
-  API. All it needs is an API key from
-  [console.typesafe.ai/keys](https://console.typesafe.ai/keys). In Claude Code,
-  put it in the plugin's *Decisions API key* setting (Claude Code asks for it
-  when you enable the plugin and keeps it in your system's credential store);
-  anywhere else, set the `TYPESAFE_API_KEY` environment variable.
-- **A self-hosted model**: any service that answers the same API as Jev
-  (`POST /v1/systemone`, and `GET /v1/models` for the health check). Set its
-  address as the plugin's *Decisions API URL*, or as `decisionsUrl` in
-  `~/.config/brain-traverse/config.json` (or `BRAIN_DECISIONS_URL`), for
-  example `http://my-server:8081`. No API key is needed; if your service checks
-  one, give it as the API key setting or `BRAIN_DECISIONS_API_KEY`.
-
-What leaves your machine: each prompt, cut to 1,500 characters
-(`maxPromptChars`), and the `criteria` of the notes being chosen between, sent
-to Jev or to your own service. The notes' contents are never sent. Each step is
-one request, capped at 2 s, and a whole prompt at 3 s. If the service is slow
-or unreachable, the prompt goes ahead without a note: routing pauses and
-retries later, and never blocks your agent.
-
-To check the key and see what the last prompt routed to, run
-`/duker-brain:status` in Claude Code, `/brain status` in Pi, or
-`brain-traverse health`.
-
----
+The repository is `duker-brain`; its two command-line tools are
+`brain-traverse` (the router) and `brain-keeper` (the authoring tools).
 
 ## Install
 
 You need Node.js 22 or newer on your `PATH`, and a
 [TypeSafe API key or a self-hosted decision model](#the-decision-model).
+
+| Agent | How notes reach it | Setup |
+|---|---|---|
+| Claude Code | Automatically, on every prompt | [Plugin](#claude-code-plugin) |
+| Pi | Automatically, on every prompt | [Package](#pi) |
+| Codex, Cursor and other MCP clients | On request: the agent calls `brain_route` | [MCP server and skill](#codex-and-other-mcp-clients) |
 
 ### Claude Code (plugin)
 
@@ -137,8 +115,8 @@ and `/brain-export` commands. Then create a brain from inside Pi and reload:
 
 `--starter` adds a [starter brain](#starter-and-shared-brains) so routing has
 something to do straight away; `--example` adds a small sample tree instead.
-Leave both out to start with just the catch-all note. `/brain status` shows whether routing is live, and `/brain help`
-lists all in-session subcommands.
+Leave both out to start with just the catch-all note. `/brain status` shows
+whether routing is live, and `/brain help` lists all in-session subcommands.
 
 Pointing `/brain-init` at an existing Obsidian vault is safe: it never
 overwrites a note (it does regenerate `_index.json` files, which are build
@@ -149,22 +127,22 @@ what the notes still need.
 
 ### Codex and other MCP clients
 
-These harnesses get the keeper: the tools and the two commands. Automatic
-routing on every prompt is available for Claude Code (above) and Pi; everywhere
-else the agent asks for the note itself with the `brain_route` tool, and the
-[duker-brain skill](skills/duker-brain/SKILL.md) tells it when to.
+Any MCP client gets the 18 tools. These clients have no prompt hook, so
+routing is on request: the agent calls `brain_route` with the user's prompt and
+gets the matching note back. The [duker-brain skill](skills/duker-brain/SKILL.md)
+tells it when to do that, and how to write notes the router can find.
 
 #### Without cloning
 
-You need Node.js 22 or newer and git. Create a brain (or adopt an Obsidian
-vault you already have) once, in a terminal:
+You also need git. Create a brain (or adopt an Obsidian vault you already
+have) once, in a terminal:
 
 ```bash
 npx -y --package=github:DukeR-git/duker-brain brain-keeper init ~/brain --starter python-backend
 ```
 
-Then add the server to your client's MCP config (`mcp.json`,
-`.cursor/mcp.json`, `.vscode/mcp.json`, …). This is
+Then add the server to your client's MCP config, for example
+`.cursor/mcp.json`. This is
 [skills/duker-brain/mcp.json](skills/duker-brain/mcp.json):
 
 ```json
@@ -182,17 +160,19 @@ Then add the server to your client's MCP config (`mcp.json`,
 }
 ```
 
-`npx` fetches the repository and runs the prebuilt bundle from [dist](dist).
-The first run takes a while, which is one more reason to run `init` first: it
-warms the cache, so the client does not time out waiting for the server.
-`BRAIN_VAULT_ROOT` can be left out when `init` saved the vault, and the key
-when you set `BRAIN_DECISIONS_URL` to a self-hosted service that does not check
-one. On Windows, clients that cannot launch `npx` directly need
-`"command": "cmd"` and `"args": ["/c", "npx", "-y", …]`.
+- `npx` fetches the repository and runs the prebuilt bundle from [dist](dist).
+  The first run takes a while. Running `init` first warms the cache, so the
+  client does not time out waiting for the server.
+- `BRAIN_VAULT_ROOT` can be left out when `init` saved the vault. The key can
+  be left out when `BRAIN_DECISIONS_URL` points at a self-hosted service that
+  does not check one.
+- The file name, and in some clients the top-level key, differ; the `brain`
+  entry is the same everywhere.
+- On Windows, clients that cannot launch `npx` directly need
+  `"command": "cmd"` and `"args": ["/c", "npx", "-y", …]`.
 
-Copy the [skills/duker-brain](skills/duker-brain) folder to wherever your agent
-reads skills from, so it queries the brain before answering and follows the
-vault's authoring rules when it writes notes.
+Last, copy the [skills/duker-brain](skills/duker-brain) folder to wherever your
+agent reads skills from.
 
 #### From a checkout
 
@@ -211,14 +191,41 @@ codex mcp add brain -- node /path/to/duker-brain/brain-keeper/bin/brain-keeper.m
 ```
 
 To give Claude Code only the tools, without routing, use the same command
-with `claude mcp add brain --scope user`.
-
-It also says where to copy the two command files. See
-[brain-keeper/commands](brain-keeper/commands/README.md).
+with `claude mcp add brain --scope user`. `setup` also says where to copy the
+two command files; see [brain-keeper/commands](brain-keeper/commands/README.md).
 
 Already using Pi? The package is cloned at
 `~/.pi/agent/git/github.com/DukeR-git/duker-brain`, so you can point the MCP
 commands there instead of cloning again.
+
+## Writing the brain
+
+**Note frontmatter is the source of truth, and every `_index.json` is a build
+artifact.** A note describes itself; a folder describes itself in `_about.md`:
+
+```markdown
+---
+id: asyncpg_pooling
+title: asyncpg Connection Pooling
+criteria: PostgreSQL connections, asyncpg pool sizing and lifespan setup, acquiring and releasing connections, PgBouncer transaction mode, statement cache errors
+---
+```
+
+- `criteria` is what the decision model actually reads. Write 10–25 words that
+  tell a note apart from its **siblings**; it is not a summary of the note.
+- Keep each folder to **15 children or fewer**. Past that, each option gets too
+  few tokens to describe itself.
+- One root note carries `fallback: true`, the catch-all used when routing is
+  unsure. A folder may have its own catch-all too: when routing reaches
+  `Backend/` confidently and then hesitates, Backend's catch-all is used rather
+  than the root's.
+
+The keeper tools recompile the manifests after every write. If you edit in
+Obsidian by hand, run `brain_rebuild` (or `brain-keeper rebuild`), or leave
+`brain-keeper watch` running. `brain_doctor` lists what breaks these rules, and
+`brain_check_routing` shows where a prompt lands. Writes are atomic, and
+removed notes go to the vault's `.trash/` rather than being deleted, but
+keeping the vault in git is still the best undo.
 
 ## Starter and shared brains
 
@@ -254,6 +261,36 @@ In Claude Code these are `/duker-brain:add` and `/duker-brain:update`, and in
 Pi `/brain-add` and `/brain-update`. To publish your own brain, and for the
 details of how updates work, see [brains/README.md](brains/README.md).
 
+## The decision model
+
+At each folder of the brain, a decision model reads the prompt and the
+`criteria` of the notes and subfolders there, and picks one. Use either:
+
+- **TypeSafe Jev** (the default): the hosted [Jev](https://docs.typesafe.ai)
+  API. All it needs is an API key from
+  [console.typesafe.ai/keys](https://console.typesafe.ai/keys). In Claude Code,
+  put it in the plugin's *Decisions API key* setting (Claude Code asks for it
+  when you enable the plugin and keeps it in your system's credential store);
+  anywhere else, set the `TYPESAFE_API_KEY` environment variable.
+- **A self-hosted model**: any service that answers the same API as Jev
+  (`POST /v1/systemone`, and `GET /v1/models` for the health check). Set its
+  address as the plugin's *Decisions API URL*, or as `decisionsUrl` in
+  `~/.config/brain-traverse/config.json` (or `BRAIN_DECISIONS_URL`), for
+  example `http://my-server:8081`. No API key is needed; if your service checks
+  one, give it as the API key setting or `BRAIN_DECISIONS_API_KEY`.
+
+**What leaves your machine:** each prompt, cut to 1,500 characters
+(`maxPromptChars`), and the `criteria` of the notes being chosen between, sent
+to Jev or to your own service. The notes' contents are never sent.
+
+Each step is one request, capped at 2 s, and a whole prompt at 3 s. If the
+service is slow or unreachable, the prompt goes ahead without a note: routing
+pauses and retries later, and never blocks your agent.
+
+To check the key and see what the last prompt routed to, run
+`/duker-brain:status` in Claude Code, `/brain status` in Pi, or
+`brain-traverse health`.
+
 ## Configuration
 
 One config serves the router, the keeper and the CLIs. Settings are read in
@@ -285,44 +322,37 @@ key; the full reference is in [pi-traverser](pi-traverser/README.md#6-configurat
 The router and the keeper read the same settings, so `brain_check_routing`
 predicts exactly what the router will do.
 
-## Writing the brain
+## Command-line tools
 
-**Note frontmatter is the source of truth, and every `_index.json` is a build
-artifact.** A note describes itself; a folder describes itself in `_about.md`:
+After `npm install` in a checkout, run them with `node`. After `npm link`,
+they are also on your `PATH`. Without a checkout,
+`npx -y --package=github:DukeR-git/duker-brain brain-keeper doctor` runs the
+same commands.
 
-```markdown
----
-id: asyncpg_pooling
-title: asyncpg Connection Pooling
-criteria: PostgreSQL connections, asyncpg pool sizing and lifespan setup, acquiring and releasing connections, PgBouncer transaction mode, statement cache errors
----
+```bash
+node pi-traverser/bin/brain-traverse.mjs route "How do I size an asyncpg pool?" -v
+node pi-traverser/bin/brain-traverse.mjs eval        # run routing regression evals
+node pi-traverser/bin/brain-traverse.mjs health      # does the decisions API answer, and is the key accepted?
+node pi-traverser/bin/brain-traverse.mjs stats       # what gets injected, what never does, near ties, cache hits
+node brain-keeper/bin/brain-keeper.mjs doctor        # vault health
+node brain-keeper/bin/brain-keeper.mjs add python-backend     # add a starter or shared brain
+node brain-keeper/bin/brain-keeper.mjs update        # update the brains you added
+node brain-keeper/bin/brain-keeper.mjs export --format cursor # export rules to .cursor/rules/
+node brain-keeper/bin/brain-keeper.mjs search "pgbouncer"
+node brain-keeper/bin/brain-keeper.mjs tree --criteria
 ```
-
-- `criteria` is what the decision model actually reads. Write 10–25 words that
-  tell a note apart from its **siblings**; it is not a summary of the note.
-- Keep each folder to **15 children or fewer**. Past that, each option gets too
-  few tokens to describe itself.
-- One root note carries `fallback: true`, the catch-all used when routing is
-  unsure. A folder may have its own catch-all too: when routing reaches
-  `Backend/` confidently and then hesitates, Backend's catch-all is used rather
-  than the root's.
-
-The keeper tools recompile the manifests after every write. If you edit in
-Obsidian by hand, run `brain_rebuild` (or `brain-keeper rebuild`), or leave
-`brain-keeper watch` running. Writes are atomic, and removed notes go to the
-vault's `.trash/` rather than being deleted, but keeping the vault in git is
-still the best undo.
 
 ## Repository layout
 
 | Folder | What it is |
 |---|---|
 | [pi-traverser](pi-traverser) | The router: the Pi extension, the Claude Code hook, and the `brain-traverse` CLI for tuning routes without launching an agent. |
-| [.claude-plugin](.claude-plugin), [claude-plugin](claude-plugin) | The Claude Code plugin and marketplace manifests, and the plugin's own commands. |
-| [brains](brains) | The starter brains, and how to share your own. |
-| [dist](dist) | Self-contained bundles of the CLIs and the hook, built by `npm run build` and committed, because the plugin runs them without an install. |
 | [brain-keeper](brain-keeper) | The authoring tools: Pi tools, the MCP server, the `brain-keeper` CLI and the two commands. |
 | [brain-core](brain-core) | Shared by both: vault schema, frontmatter parser, compiler, traversal engine and decisions client. |
+| [.claude-plugin](.claude-plugin), [claude-plugin](claude-plugin) | The Claude Code plugin and marketplace manifests, and the plugin's own commands. |
+| [skills](skills) | The agent skill and the `mcp.json` for other MCP clients. |
+| [brains](brains) | The starter brains, and how to share your own. |
+| [dist](dist) | Self-contained bundles of the CLIs and the hook, built by `npm run build` and committed, because the plugin and `npx` run them without an install. |
 | [docs](docs) | The [roadmap](docs/ROADMAP.md). |
 
 The router reads `_index.json` manifests and the keeper writes them. Both
@@ -334,24 +364,6 @@ test asserts that recompiling the fixture vault produces no diff.
 TypeScript folders must therefore stay side by side. The npm workspace at the
 root only exists so that dependencies install in one place.
 
-## Command-line tools
-
-After `npm install` in a checkout, run them with `node`. After `npm link`,
-they are also on your `PATH`.
-
-```bash
-node pi-traverser/bin/brain-traverse.mjs route "How do I size an asyncpg pool?" -v
-node pi-traverser/bin/brain-traverse.mjs eval        # run routing regression evals
-node pi-traverser/bin/brain-traverse.mjs health     # does the decisions API answer, and is the key accepted?
-node pi-traverser/bin/brain-traverse.mjs stats      # what gets injected, what never does, near ties, cache hits
-node brain-keeper/bin/brain-keeper.mjs doctor       # vault health
-node brain-keeper/bin/brain-keeper.mjs add python-backend  # add a starter or shared brain
-node brain-keeper/bin/brain-keeper.mjs update       # update the brains you added
-node brain-keeper/bin/brain-keeper.mjs export --format cursor # export rules to .cursor/rules/
-node brain-keeper/bin/brain-keeper.mjs search "pgbouncer"
-node brain-keeper/bin/brain-keeper.mjs tree --criteria
-```
-
 ## Development
 
 ```bash
@@ -359,12 +371,6 @@ npm install
 npm test            # all three packages
 npm run typecheck
 npm run build       # rebuild the self-contained dist/ bundles (commit the result)
-```
-
-```
-brain-core     174   vault model, compiler, config, traversal, cache, evals, exporter
-pi-traverser    72   the Pi extension, the Claude Code hook, injection formatting, config, CLI
-brain-keeper   114   operations, the 18-tool surface, shared brains, Pi registration, MCP server
 ```
 
 None of the tests need a network or an API key: a mock server imitates Jev,
