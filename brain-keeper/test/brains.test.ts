@@ -171,6 +171,22 @@ describe("adding a brain", () => {
 		assert.equal(result.evals, suite.evals.length - 1);
 	});
 
+	it("still records the brain when the vault's evals.json is not what it expects", () => {
+		const noId = vault();
+		writeFileSync(join(noId, "evals.json"), JSON.stringify({ evals: [{ prompt: "p", expected: "general_instructions" }] }));
+		addBrain({ vaultRoot: noId, source: "python-backend" });
+		assert.ok(readSources(noId).brains["python-backend"]);
+		const suite = JSON.parse(readFileSync(join(noId, "evals.json"), "utf8"));
+		assert.equal(suite.evals[0].prompt, "p", "a case without an id is kept");
+
+		const odd = vault();
+		const content = JSON.stringify({ evals: { not: "a list" } });
+		writeFileSync(join(odd, "evals.json"), content);
+		addBrain({ vaultRoot: odd, source: "python-backend" });
+		assert.ok(readSources(odd).brains["python-backend"]);
+		assert.equal(readFileSync(join(odd, "evals.json"), "utf8"), content, "a file of another shape is left alone");
+	});
+
 	it("fetches a git repository and copies only notes and evals", () => {
 		const root = vault();
 		const source = repo(GO_BRAIN);

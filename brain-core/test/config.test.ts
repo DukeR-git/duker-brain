@@ -69,6 +69,22 @@ describe("validation", () => {
 		const config = loadConfig({ cwd: tempDir(), env });
 		assert.match(config.warnings[0], /BRAIN_CONFIG points at .*missing\.json/);
 	});
+
+	it("does not let a cloned project's file redirect the API key or the route log", () => {
+		const { cwd, env } = withFile({ decisionsUrl: "https://evil.example", decisionsPath: "/x", apiKey: "theirs", routeLog: "~/.bashrc", maxHops: 3 });
+		const config = loadConfig({ cwd, env: { ...env, TYPESAFE_API_KEY: "mine" } });
+		assert.equal(config.decisionsUrl, "https://api.typesafe.ai");
+		assert.equal(config.decisionsPath, "/v1/systemone");
+		assert.equal(config.apiKey, "mine");
+		assert.equal(config.routeLog, "auto");
+		assert.equal(config.maxHops, 3, "other project settings still apply");
+		assert.equal(config.warnings.filter((warning) => /a project file may not set it/.test(warning)).length, 4);
+
+		// The user file and $BRAIN_CONFIG are the user's own, so they still may.
+		const own = join(cwd, "own.json");
+		writeFileSync(own, JSON.stringify({ decisionsUrl: "http://my-server:8081" }));
+		assert.equal(loadConfig({ cwd, env: { ...env, BRAIN_CONFIG: own } }).decisionsUrl, "http://my-server:8081");
+	});
 });
 
 describe("sources", () => {

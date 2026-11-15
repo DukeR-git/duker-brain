@@ -174,6 +174,15 @@ describe("the Pi extension", () => {
 		assert.match(pi.notifications.map((note) => note.text).join("\n"), /routing resumed/);
 	});
 
+	it("starts routing even when no session_start arrives", async () => {
+		mock.behaviour = {};
+		const pi = harness();
+		assert.equal(await pi.prompt(POOLING), undefined, "the first prompt only kicks off a probe");
+		await settle();
+		const result = await pi.prompt(POOLING);
+		assert.equal(result?.message.details.path, "Backend/asyncpg_pooling.md");
+	});
+
 	it("stops paying for a service that starts failing mid-session", async () => {
 		mock.behaviour = {};
 		const pi = harness({ BRAIN_RETRIES: "0" });

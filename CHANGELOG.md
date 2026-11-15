@@ -37,9 +37,39 @@ All notable changes to this project are recorded here. The format follows
   plan is gone too.
 - Pi's own 2-minute route cache. Repeated prompts are served by the route
   cache, which notices vault edits.
+- Unused helpers: `envNumber`, `envBoolean`, `ensureFolder` and
+  `DecisionsClient.pickChoice`.
+
+### Security
+
+- `./brain-traverse.config.json` in a project folder can no longer set
+  `decisionsUrl`, `decisionsPath`, `apiKey` or `routeLog`. A cloned repository
+  could otherwise send your API key and prompts to its own server, or point the
+  route log at any file. Set them in the user config, `$BRAIN_CONFIG` or a
+  `BRAIN_*` variable; a project file that sets them gets a warning.
+- `brain_export` (and `brain-keeper export`, `/brain-export`) no longer replaces
+  a file it did not write itself, such as a hand-made `.aider.conf.yml`; it
+  stops before writing anything and names the files. Pass `overwrite` (or
+  `--overwrite`) to replace them. The tool is now marked destructive, so
+  harnesses can ask first. Files from an earlier export carry no marker yet, so
+  the first export after upgrading needs `--overwrite` once.
 
 ### Fixed
 
+- Cursor export no longer drops a note when two folders use the same id: such
+  notes get file names that include their folder (`Backend__overview.mdc`).
+- Cursor rules for infrastructure notes now match YAML files (`**/*.yaml`,
+  `**/*.yml`); the old `**/*.ya?ml` matched neither.
+- The Pi router now starts when the first event it sees is a prompt rather than
+  `session_start`; before, routing stayed off for the whole session.
+- The route cache no longer stats every note in the vault on each prompt. Its
+  fingerprint covers the `_index.json` files (skipping `.brainignore`d
+  folders), and a hit checks only the notes it holds: about 30 ms instead of
+  400 ms for a 5,000-note vault on Windows, and one walk per prompt, not two.
+  Existing cache files are dropped once.
+- `brain-keeper add` and `update` record a brain before merging its evals, and
+  leave a vault `evals.json` of an unexpected shape alone, so a case without an
+  `id` no longer leaves a half-added brain that neither command can fix.
 - Composite routing no longer injects a runner-up note on its own when the top
   choice found nothing; it falls back instead, and does not ask the same
   question twice.

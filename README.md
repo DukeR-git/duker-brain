@@ -261,6 +261,9 @@ this order, and later sources win:
 
 1. `~/.config/brain-traverse/config.json`: per user. `init` writes `vaultRoot` here.
 2. `./brain-traverse.config.json`, or the file named by `$BRAIN_CONFIG`: per project.
+   Because a project file arrives with any repository you clone, it may not set
+   `decisionsUrl`, `decisionsPath`, `apiKey` or `routeLog`; those are ignored
+   with a warning (a `$BRAIN_CONFIG` file may set them).
 3. `BRAIN_*` environment variables.
 
 The settings you are most likely to touch:
@@ -359,9 +362,9 @@ npm run build       # rebuild the self-contained dist/ bundles (commit the resul
 ```
 
 ```
-brain-core     169   vault model, compiler, config, traversal, cache, evals, exporter
-pi-traverser    71   the Pi extension, the Claude Code hook, injection formatting, config, CLI
-brain-keeper   113   operations, the 18-tool surface, shared brains, Pi registration, MCP server
+brain-core     174   vault model, compiler, config, traversal, cache, evals, exporter
+pi-traverser    72   the Pi extension, the Claude Code hook, injection formatting, config, CLI
+brain-keeper   114   operations, the 18-tool surface, shared brains, Pi registration, MCP server
 ```
 
 None of the tests need a network or an API key: a mock server imitates Jev,

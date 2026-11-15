@@ -130,6 +130,12 @@ function readConfigFiles(cwd, env, label2, warnings = []) {
       throw new Error(`${label2}: ${path} must contain a JSON object of settings`);
     }
     const record2 = values;
+    if (!explicit && path !== candidates[0]) {
+      for (const key of USER_ONLY_KEYS.filter((key2) => key2 in record2)) {
+        delete record2[key];
+        warnings.push(`${path}: ignored ${key}: a project file may not set it; use ${candidates[0]} or a BRAIN_* variable`);
+      }
+    }
     if (typeof record2.vaultRoot === "string" && record2.vaultRoot.trim()) {
       record2.vaultRoot = resolveUserPath(record2.vaultRoot.trim(), dirname(path));
     }
@@ -141,7 +147,7 @@ function envString(env, key, fallback) {
   const value = env[key];
   return value === void 0 || value.trim() === "" ? fallback : value.trim();
 }
-var JEV_URL, DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, TYPESAFE_KEY_ENV, PLUGIN_OPTIONS, PROJECT_CONFIG_FILE, DEFAULT_TIMEOUT_MS, DEFAULT_ROUTE_BUDGET_MS;
+var JEV_URL, DEFAULT_DECISIONS_PATH, DEFAULT_MODEL, TYPESAFE_KEY_ENV, PLUGIN_OPTIONS, PROJECT_CONFIG_FILE, USER_ONLY_KEYS, DEFAULT_TIMEOUT_MS, DEFAULT_ROUTE_BUDGET_MS;
 var init_env = __esm({
   "brain-core/src/env.ts"() {
     "use strict";
@@ -155,6 +161,7 @@ var init_env = __esm({
       CLAUDE_PLUGIN_OPTION_DECISIONS_URL: "BRAIN_DECISIONS_URL"
     };
     PROJECT_CONFIG_FILE = "brain-traverse.config.json";
+    USER_ONLY_KEYS = ["decisionsUrl", "decisionsPath", "apiKey", "routeLog"];
     DEFAULT_TIMEOUT_MS = 2e3;
     DEFAULT_ROUTE_BUDGET_MS = 3e3;
   }
@@ -552,7 +559,7 @@ var init_frontmatter = __esm({
 });
 
 // brain-core/src/vault.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync4, readdirSync, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync, statSync as statSync3 } from "node:fs";
 import { basename as basename2, extname, join as join3, resolve as resolve4 } from "node:path";
 function compareText(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -4630,7 +4637,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve11) {
+function isRecursive(inst, stack, resolve10) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -4640,7 +4647,7 @@ function isRecursive(inst, stack, resolve11) {
   let result = NONE;
   const check = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve11);
+      const answer = isRecursive(child, stack, resolve10);
       if (answer > result)
         result = answer;
     }
@@ -4651,7 +4658,7 @@ function isRecursive(inst, stack, resolve11) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve11) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve10) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -4715,7 +4722,7 @@ function isRecursive(inst, stack, resolve11) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve11 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve10 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -8236,7 +8243,7 @@ var init_routelog = __esm({
 
 // brain-core/src/decisions-client.ts
 function sleep(ms) {
-  return new Promise((resolve11) => setTimeout(resolve11, ms));
+  return new Promise((resolve10) => setTimeout(resolve10, ms));
 }
 function parseRetryAfter(header) {
   if (!header) return void 0;
@@ -8345,24 +8352,6 @@ var init_decisions_client = __esm({
           clearTimeout(timer);
         }
       }
-      /** Single-choice convenience wrapper. */
-      async pickChoice(state, instructions, criteria) {
-        const outcome = await this.ask(state, {
-          route_selection: { type: "choice", instructions, criteria }
-        });
-        if (!outcome.ok) return outcome;
-        const answer = outcome.answers.route_selection;
-        if (!answer || answer.type !== "choice") {
-          return { ok: false, error: "no choice answer returned", latencyMs: outcome.latencyMs };
-        }
-        return {
-          ok: true,
-          choice: answer.choice,
-          confidence: choiceConfidence(answer),
-          probabilities: answer.probabilities,
-          latencyMs: outcome.latencyMs
-        };
-      }
       /** Is the service up, and does it take our key? `GET /v1/models` checks the key. Never throws. */
       async health() {
         const models = await this.probe("/v1/models");
@@ -8419,35 +8408,54 @@ function hashPrompt(normalized) {
 }
 function computeVaultFingerprint(vaultRoot) {
   const records = [];
-  function scan(dir) {
+  const ignored = loadIgnore(vaultRoot);
+  function scan(dir, rel) {
     let entries;
     try {
-      entries = readdirSync4(dir);
+      entries = readdirSync4(dir, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const name of entries) {
-      if (name === ".git" || name === "node_modules" || name === ".trash" || name.startsWith(".")) {
-        continue;
-      }
+    for (const entry of entries) {
+      const name = entry.name;
+      if (name.startsWith(".") || name === "node_modules") continue;
+      const path = rel ? `${rel}/${name}` : name;
+      if (ignored(path)) continue;
       const full = join6(dir, name);
-      let st;
-      try {
-        st = statSync7(full);
-      } catch {
-        continue;
+      let isDirectory = entry.isDirectory();
+      if (entry.isSymbolicLink()) {
+        try {
+          isDirectory = statSync7(full).isDirectory();
+        } catch {
+          continue;
+        }
       }
-      if (st.isDirectory()) {
-        scan(full);
-      } else if (name === MANIFEST_FILE || name.endsWith(".md")) {
-        const rel = full.slice(vaultRoot.length).replace(/\\/g, "/");
-        records.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
+      if (isDirectory) {
+        scan(full, path);
+      } else if (name === MANIFEST_FILE) {
+        try {
+          const st = statSync7(full);
+          records.push(`${path}:${st.size}:${Math.floor(st.mtimeMs)}`);
+        } catch {
+        }
       }
     }
   }
-  scan(vaultRoot);
+  scan(vaultRoot, "");
   records.sort();
   return createHash3("sha256").update(records.join("\n")).digest("hex").slice(0, 16);
+}
+function stampFiles(vaultRoot, result) {
+  const files = {};
+  for (const doc of result.documents ?? (result.document ? [result.document] : [])) {
+    try {
+      const st = statSync7(join6(vaultRoot, doc.path));
+      files[doc.path] = `${st.size}:${Math.floor(st.mtimeMs)}`;
+    } catch {
+      files[doc.path] = "";
+    }
+  }
+  return files;
 }
 var CACHE_FILE, DEFAULT_MAX_CACHE_ENTRIES, CACHE_VERSION, RouteCache, defaultRouteCache;
 var init_cache = __esm({
@@ -8455,9 +8463,10 @@ var init_cache = __esm({
     "use strict";
     init_fsutil();
     init_manifest();
+    init_vault();
     CACHE_FILE = ".brain.cache.json";
     DEFAULT_MAX_CACHE_ENTRIES = 500;
-    CACHE_VERSION = 2;
+    CACHE_VERSION = 3;
     RouteCache = class {
       constructor(maxEntries = DEFAULT_MAX_CACHE_ENTRIES) {
         this.maxEntries = maxEntries;
@@ -8466,6 +8475,7 @@ var init_cache = __esm({
       memory = /* @__PURE__ */ new Map();
       loadedVaultRoot = null;
       currentFingerprint = null;
+      fingerprintRoot = null;
       fingerprintMtime = 0;
       hits = 0;
       misses = 0;
@@ -8486,7 +8496,9 @@ ${norm}` : norm);
           this.misses++;
           return null;
         }
-        if (entry.fingerprint !== fp) {
+        const files = entry.files ?? {};
+        const fresh = stampFiles(vaultRoot, entry.result);
+        if (entry.fingerprint !== fp || Object.keys(fresh).some((path) => fresh[path] !== files[path])) {
           this.memory.delete(qHash);
           this.misses++;
           return null;
@@ -8512,7 +8524,7 @@ ${norm}` : norm);
         if (!norm) return;
         const qHash = hashPrompt(scope ? `${scope}
 ${norm}` : norm);
-        const fp = this.getOrUpdateFingerprint(vaultRoot);
+        const fp = this.currentFingerprint && this.fingerprintRoot === vaultRoot ? this.currentFingerprint : this.getOrUpdateFingerprint(vaultRoot);
         this.ensureLoaded(vaultRoot);
         if (this.memory.size >= this.maxEntries && !this.memory.has(qHash)) {
           const oldestKey = this.memory.keys().next().value;
@@ -8525,6 +8537,8 @@ ${norm}` : norm);
           queryHash: qHash,
           fingerprint: fp,
           result: JSON.parse(JSON.stringify(result)),
+          // shortcut: stamped after routing read the note, so an edit in those few ms is missed until the next one.
+          files: stampFiles(vaultRoot, result),
           createdAt: Date.now(),
           hits: 0
         };
@@ -8560,10 +8574,11 @@ ${norm}` : norm);
       }
       getOrUpdateFingerprint(vaultRoot) {
         const now = Date.now();
-        if (this.currentFingerprint && now - this.fingerprintMtime < 1500) {
+        if (this.currentFingerprint && this.fingerprintRoot === vaultRoot && now - this.fingerprintMtime < 1500) {
           return this.currentFingerprint;
         }
         this.currentFingerprint = computeVaultFingerprint(vaultRoot);
+        this.fingerprintRoot = vaultRoot;
         this.fingerprintMtime = now;
         return this.currentFingerprint;
       }
@@ -8611,7 +8626,7 @@ ${norm}` : norm);
 
 // brain-core/src/traverser.ts
 import { readFileSync as readFileSync8 } from "node:fs";
-import { basename as basename4, resolve as resolve7 } from "node:path";
+import { basename as basename4, resolve as resolve6 } from "node:path";
 function routeQuestion(manifest) {
   const criteria = {};
   for (const entry of manifest.entries) criteria[entry.id] = entry.criteria;
@@ -8789,7 +8804,7 @@ var init_traverser = __esm({
         if (this.config.gateEnabled && isTrivialFollowUp(state)) {
           return finish2("skipped", "a short acknowledgement; no reference needed");
         }
-        const rootDir = resolve7(this.config.vaultRoot);
+        const rootDir = resolve6(this.config.vaultRoot);
         let loaded;
         try {
           loaded = this.manifests.load(rootDir);
@@ -9039,7 +9054,7 @@ var init_traverser = __esm({
         const setting = this.config.fallbackDocument;
         if (!setting) return finish2(status, reason, { gate });
         if (setting !== "auto") {
-          const path = resolve7(this.config.vaultRoot, setting);
+          const path = resolve6(this.config.vaultRoot, setting);
           const document = isInsideVault(this.config.vaultRoot, path) ? this.readDocument(path, { id: "fallback", type: "leaf", criteria: "", targetPath: setting }) : null;
           if (!document) return finish2(status, `${reason}; fallback '${setting}' not found`, { gate });
           return finish2("fallback", reason, { document, gate });
@@ -9047,7 +9062,7 @@ var init_traverser = __esm({
         let manifests = visited;
         if (manifests.length === 0) {
           try {
-            const root = this.manifests.load(resolve7(this.config.vaultRoot));
+            const root = this.manifests.load(resolve6(this.config.vaultRoot));
             manifests = root ? [root] : [];
           } catch {
             manifests = [];
@@ -9353,8 +9368,8 @@ var init_eval = __esm({
 });
 
 // brain-core/src/exporter.ts
-import { mkdirSync as mkdirSync4, readFileSync as readFileSync10 } from "node:fs";
-import { dirname as dirname5, join as join7, resolve as resolve8 } from "node:path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync3, readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname5, join as join7, resolve as resolve7 } from "node:path";
 async function exportVault(vaultRoot, format, outDir, options = {}) {
   const tree = scanVault(vaultRoot);
   const notes = [];
@@ -9380,98 +9395,70 @@ async function exportVault(vaultRoot, format, outDir, options = {}) {
     }
   }
   collectLeaves(tree.root);
-  const resolvedOutDir = resolve8(outDir);
-  const filesWritten = [];
+  const resolvedOutDir = resolve7(outDir);
+  const planned = [];
   switch (format) {
     case "cursor": {
+      const ids = /* @__PURE__ */ new Map();
+      for (const note of notes) ids.set(note.id, (ids.get(note.id) ?? 0) + 1);
       for (const note of notes) {
-        const filename = `${note.id}.mdc`;
-        const targetPath = join7(resolvedOutDir, filename);
-        const content = renderCursorMdc(note);
-        filesWritten.push(targetPath);
-        if (!options.dryRun) {
-          mkdirSync4(dirname5(targetPath), { recursive: true });
-          writeFileAtomic(targetPath, content);
-        }
+        const name = ids.get(note.id) > 1 ? note.path.replace(/\.md$/i, "").replace(/[\\/]/g, "__") : note.id;
+        planned.push({ path: join7(resolvedOutDir, `${name}.mdc`), content: renderCursorMdc(note) });
       }
       break;
     }
     case "windsurf": {
       const targetFile = resolvedOutDir.endsWith(".windsurfrules") ? resolvedOutDir : join7(resolvedOutDir, ".windsurfrules");
-      const content = renderWindsurfRules(notes);
-      filesWritten.push(targetFile);
-      if (!options.dryRun) {
-        mkdirSync4(dirname5(targetFile), { recursive: true });
-        writeFileAtomic(targetFile, content);
-      }
+      planned.push({ path: targetFile, content: renderWindsurfRules(notes) });
       break;
     }
     case "aider": {
-      const docsDir = join7(resolvedOutDir, ".brain-docs");
-      const relativeDocPaths = [];
       for (const note of notes) {
-        const targetPath = join7(docsDir, note.path);
-        const content = `# ${note.title}
-
-${note.body}
-`;
-        filesWritten.push(targetPath);
-        relativeDocPaths.push(`.brain-docs/${note.path.replace(/\\/g, "/")}`);
-        if (!options.dryRun) {
-          mkdirSync4(dirname5(targetPath), { recursive: true });
-          writeFileAtomic(targetPath, content);
-        }
+        planned.push({ path: join7(resolvedOutDir, ".brain-docs", note.path), content: renderPlainNote(note) });
       }
-      const confPath = join7(resolvedOutDir, ".aider.conf.yml");
       const aiderConfig = [
-        "# Aider configuration generated from brain-traverse vault",
+        `# ${GENERATED_MARKER} from a brain-traverse vault`,
         "read:",
-        ...relativeDocPaths.map((p) => `  - ${p}`),
+        ...notes.map((note) => `  - .brain-docs/${note.path.replace(/\\/g, "/")}`),
         ""
       ].join("\n");
-      filesWritten.push(confPath);
-      if (!options.dryRun) {
-        mkdirSync4(dirname5(confPath), { recursive: true });
-        writeFileAtomic(confPath, aiderConfig);
-      }
+      planned.push({ path: join7(resolvedOutDir, ".aider.conf.yml"), content: aiderConfig });
       break;
     }
     case "bundle": {
       for (const note of notes) {
-        const targetPath = join7(resolvedOutDir, note.path);
-        const content = `# ${note.title}
-
-${note.body}
-`;
-        filesWritten.push(targetPath);
-        if (!options.dryRun) {
-          mkdirSync4(dirname5(targetPath), { recursive: true });
-          writeFileAtomic(targetPath, content);
-        }
+        planned.push({ path: join7(resolvedOutDir, note.path), content: renderPlainNote(note) });
       }
-      const indexPath = join7(resolvedOutDir, "README.md");
       const indexLines = [
         "# Reference Guides Index",
         "",
-        "This bundle was generated from the knowledge vault by `brain-keeper export`.",
+        `${GENERATED_MARKER} from the knowledge vault.`,
         "",
         "| Document | Criteria / Scope |",
         "|---|---|",
         ...notes.map((n) => `| [${n.title}](${n.path.replace(/\\/g, "/")}) | ${n.criteria} |`),
         ""
       ];
-      filesWritten.push(indexPath);
-      if (!options.dryRun) {
-        mkdirSync4(dirname5(indexPath), { recursive: true });
-        writeFileAtomic(indexPath, indexLines.join("\n"));
-      }
+      planned.push({ path: join7(resolvedOutDir, "README.md"), content: indexLines.join("\n") });
       break;
+    }
+  }
+  const foreign = options.overwrite ? [] : planned.filter(({ path }) => existsSync8(path) && !readFileSync10(path, "utf8").includes(GENERATED_MARKER));
+  if (foreign.length) {
+    throw new Error(
+      `these files already exist and were not written by brain-keeper export: ${foreign.map(({ path }) => path).join(", ")}. Move them away, choose another output folder, or pass overwrite to replace them.`
+    );
+  }
+  if (!options.dryRun) {
+    for (const { path, content } of planned) {
+      mkdirSync3(dirname5(path), { recursive: true });
+      writeFileAtomic(path, content);
     }
   }
   return {
     format,
     outDir: resolvedOutDir,
-    filesWritten,
+    filesWritten: planned.map(({ path }) => path),
     noteCount: notes.length,
     dryRun: Boolean(options.dryRun)
   };
@@ -9484,17 +9471,25 @@ function renderCursorMdc(note) {
     `globs: ${globs}`,
     "alwaysApply: false",
     "---",
+    `<!-- ${GENERATED_MARKER} -->`,
     `# ${note.title}`,
     "",
     note.body,
     ""
   ].join("\n");
 }
+function renderPlainNote(note) {
+  return `<!-- ${GENERATED_MARKER} -->
+# ${note.title}
+
+${note.body}
+`;
+}
 function renderWindsurfRules(notes) {
   const sections = [
     "# Reference Rules & Architecture Guidelines",
     "",
-    "<!-- Generated from Brain Vault by brain-keeper export -->",
+    `<!-- ${GENERATED_MARKER} -->`,
     ""
   ];
   for (const note of notes) {
@@ -9517,16 +9512,18 @@ function deriveGlobs(relPath) {
     return "**/*.tsx, **/*.jsx, **/*.vue, **/*.svelte, **/*.css, **/*.html";
   }
   if (lower.includes("infra") || lower.includes("docker") || lower.includes("deploy")) {
-    return "**/Dockerfile*, **/docker-compose*, **/*.ya?ml, **/*.sh";
+    return "**/Dockerfile*, **/docker-compose*, **/*.yaml, **/*.yml,**/*.sh";
   }
   return "**/*";
 }
+var GENERATED_MARKER;
 var init_exporter = __esm({
   "brain-core/src/exporter.ts"() {
     "use strict";
     init_frontmatter();
     init_fsutil();
     init_vault();
+    GENERATED_MARKER = "Generated by brain-keeper export";
   }
 });
 
@@ -9554,7 +9551,7 @@ var init_src = __esm({
 });
 
 // brain-keeper/src/operations.ts
-import { existsSync as existsSync8, mkdirSync as mkdirSync5, readFileSync as readFileSync11, renameSync as renameSync2, rmSync as rmSync3, statSync as statSync8 } from "node:fs";
+import { existsSync as existsSync9, mkdirSync as mkdirSync4, readFileSync as readFileSync11, renameSync as renameSync2, rmSync as rmSync3, statSync as statSync8 } from "node:fs";
 import { basename as basename6, dirname as dirname6, extname as extname2, join as join8 } from "node:path";
 function noteFileName(id) {
   return `${id}.md`;
@@ -9634,7 +9631,7 @@ function finish(vaultRoot, summary, changes, warnings, options) {
 }
 function folderNode(vaultRoot, folder) {
   const absolute = resolveInVault(vaultRoot, folder, "folder");
-  if (!existsSync8(absolute) || !statSync8(absolute).isDirectory()) {
+  if (!existsSync9(absolute) || !statSync8(absolute).isDirectory()) {
     throw new OperationError(
       `no such folder in the vault: ${folder || "."}. Create it with brain_add_branch first.`
     );
@@ -9653,11 +9650,11 @@ function overfullWarning(node2, added) {
 }
 function trashDestination(vaultRoot, name) {
   const trash = join8(vaultRoot, TRASH_DIR);
-  mkdirSync5(trash, { recursive: true });
+  mkdirSync4(trash, { recursive: true });
   const extension = extname2(name);
   const stem = extension ? name.slice(0, -extension.length) : name;
   let candidate = join8(trash, name);
-  for (let index = 2; existsSync8(candidate); index++) candidate = join8(trash, `${stem} ${index}${extension}`);
+  for (let index = 2; existsSync9(candidate); index++) candidate = join8(trash, `${stem} ${index}${extension}`);
   return candidate;
 }
 function addNote(vaultRoot, input, options = {}) {
@@ -9669,7 +9666,7 @@ function addNote(vaultRoot, input, options = {}) {
     if (!id) throw new OperationError(`could not derive a usable id from ${JSON.stringify(input.id ?? title)}`);
     const absolute = join8(node2.absolutePath, noteFileName(id));
     const path = relativeToVault(vaultRoot, absolute);
-    const exists = existsSync8(absolute);
+    const exists = existsSync9(absolute);
     if (exists && !input.overwrite) {
       throw new OperationError(
         `${path} already exists. Pass overwrite: true to replace it, or use brain_update_note to amend it.`
@@ -9697,7 +9694,7 @@ function updateNote(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(input.path);
     const absolute = resolveInVault(vaultRoot, input.path, "note");
-    if (!existsSync8(absolute)) throw new OperationError(`no such note: ${input.path}`);
+    if (!existsSync9(absolute)) throw new OperationError(`no such note: ${input.path}`);
     if (input.content !== void 0 && input.append !== void 0) {
       throw new OperationError("pass content (replace) or append (add to the end), not both");
     }
@@ -9745,13 +9742,13 @@ function moveNote(vaultRoot, input, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(input.from);
     const source = resolveInVault(vaultRoot, input.from, "note");
-    if (!existsSync8(source)) throw new OperationError(`no such note: ${input.from}`);
+    if (!existsSync9(source)) throw new OperationError(`no such note: ${input.from}`);
     const target = folderNode(vaultRoot, input.toFolder);
     const note = parseNote(readFileSync11(source, "utf8"));
     const id = slugify(input.newId?.trim() || note.frontmatter.id || basename6(source, ".md"));
     const destination = join8(target.absolutePath, noteFileName(id));
     if (destination === source) throw new OperationError(`${input.from} is already there`);
-    if (existsSync8(destination)) {
+    if (existsSync9(destination)) {
       throw new OperationError(`${relativeToVault(vaultRoot, destination)} already exists`);
     }
     const sourcePath = relativeToVault(vaultRoot, source);
@@ -9777,7 +9774,7 @@ function removeNote(vaultRoot, path, options = {}) {
   return withVaultLock(vaultRoot, () => {
     assertMarkdown(path);
     const absolute = resolveInVault(vaultRoot, path, "note");
-    if (!existsSync8(absolute)) throw new OperationError(`no such note: ${path}`);
+    if (!existsSync9(absolute)) throw new OperationError(`no such note: ${path}`);
     const relative4 = relativeToVault(vaultRoot, absolute);
     const warnings = [];
     try {
@@ -9808,10 +9805,10 @@ function createBranchFiles(vaultRoot, input) {
   const id = slugify(input.id?.trim() || folderName);
   const absolute = join8(parent.absolutePath, folderName);
   const path = relativeToVault(vaultRoot, absolute);
-  if (existsSync8(absolute)) throw new OperationError(`${path} already exists`);
+  if (existsSync9(absolute)) throw new OperationError(`${path} already exists`);
   const clash = parent.children?.find((child) => child.id === id);
   if (clash) throw new OperationError(`id '${id}' is already used by ${clash.path} in this folder`);
-  mkdirSync5(absolute, { recursive: true });
+  mkdirSync4(absolute, { recursive: true });
   writeFileAtomic(
     join8(absolute, ABOUT_FILE),
     buildNote({
@@ -9847,7 +9844,7 @@ function updateBranch(vaultRoot, input, options = {}) {
     const node2 = folderNode(vaultRoot, input.folder);
     if (node2.path === ".") throw new OperationError("the vault root has no _about.md to update");
     const aboutPath = join8(node2.absolutePath, ABOUT_FILE);
-    const note = existsSync8(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: {}, extraLines: [], hadFrontmatter: true, body: "" };
+    const note = existsSync9(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: {}, extraLines: [], hadFrontmatter: true, body: "" };
     const touched = [];
     if (input.title !== void 0) {
       note.frontmatter.title = assertTitle(input.title, "a folder");
@@ -9884,7 +9881,7 @@ function moveBranch(vaultRoot, input, options = {}) {
     if (isInsideVault(node2.absolutePath, parent.absolutePath)) {
       throw new OperationError("a folder cannot be moved into itself");
     }
-    if (destination !== node2.absolutePath && existsSync8(destination)) {
+    if (destination !== node2.absolutePath && existsSync9(destination)) {
       throw new OperationError(`${relativeToVault(vaultRoot, destination)} already exists`);
     }
     const id = input.newId !== void 0 ? slugify(input.newId) : node2.id;
@@ -9893,7 +9890,7 @@ function moveBranch(vaultRoot, input, options = {}) {
     if (destination !== node2.absolutePath) renameSync2(node2.absolutePath, destination);
     if (input.newId !== void 0) {
       const aboutPath = join8(destination, ABOUT_FILE);
-      const about = existsSync8(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: { title: node2.title }, extraLines: [], hadFrontmatter: true, body: "" };
+      const about = existsSync9(aboutPath) ? parseNote(readFileSync11(aboutPath, "utf8")) : { frontmatter: { title: node2.title }, extraLines: [], hadFrontmatter: true, body: "" };
       about.frontmatter.id = id;
       writeFileAtomic(aboutPath, serialiseNote(about));
     }
@@ -10253,8 +10250,8 @@ var init_routing = __esm({
 });
 
 // brain-keeper/src/tools.ts
-import { existsSync as existsSync9, readFileSync as readFileSync12 } from "node:fs";
-import { join as join9, resolve as resolve9 } from "node:path";
+import { existsSync as existsSync10, readFileSync as readFileSync12 } from "node:fs";
+import { join as join9, resolve as resolve8 } from "node:path";
 function annotationsFor(tool) {
   return {
     title: labelFor(tool.name),
@@ -10583,11 +10580,11 @@ Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${
         if (!evalPath) {
           const jsonP = join9(vault, "evals.json");
           const yamlP = join9(vault, "evals.yaml");
-          if (existsSync9(jsonP)) evalPath = jsonP;
-          else if (existsSync9(yamlP)) evalPath = yamlP;
+          if (existsSync10(jsonP)) evalPath = jsonP;
+          else if (existsSync10(yamlP)) evalPath = yamlP;
           else return { text: `No eval suite found in ${vault} (expected evals.json or evals.yaml)`, isError: true };
         }
-        const suite = loadEvalSuite(resolve9(vault, evalPath));
+        const suite = loadEvalSuite(resolve8(vault, evalPath));
         const traverser = createTraverser(config2, vault);
         const report = await runEvalSuite(suite, traverser, { tags: input.tag ? [input.tag] : void 0 });
         return ok(renderEvalReport(report));
@@ -10595,13 +10592,15 @@ Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${
     });
     brainExport = defineTool({
       name: "brain_export",
-      description: "Export vault reference guides into formats for external coding tools: Cursor (.cursor/rules/*.mdc), Windsurf (.windsurfrules), Aider (.aider.conf.yml), or clean Markdown bundle.",
+      description: "Export vault reference guides into formats for external coding tools: Cursor (.cursor/rules/*.mdc), Windsurf (.windsurfrules), Aider (.aider.conf.yml), or clean Markdown bundle. It refuses to replace an existing file it did not write itself, such as a hand-made .aider.conf.yml.",
       mutates: true,
+      destructive: true,
       idempotent: true,
       schema: object({
         format: _enum(["cursor", "windsurf", "aider", "bundle"]).describe("Target export format."),
         outputDir: string2().optional().describe("Destination directory. Defaults to standard project locations."),
-        dryRun: boolean2().optional().describe("Preview what files would be generated without writing to disk.")
+        dryRun: boolean2().optional().describe("Preview what files would be generated without writing to disk."),
+        overwrite: boolean2().optional().describe("Replace existing files the export did not write. Only when the user has said those files may go.")
       }),
       async run(config2, input) {
         const vault = requireVault(config2);
@@ -10612,7 +10611,7 @@ Every check failed to reach the decisions service at ${config2.decisionsUrl}. ${
           else if (input.format === "aider") outDir = ".";
           else outDir = "dist/vault-bundle";
         }
-        const result = await exportVault(vault, input.format, outDir, { dryRun: input.dryRun });
+        const result = await exportVault(vault, input.format, outDir, { dryRun: input.dryRun, overwrite: input.overwrite });
         const prefix = result.dryRun ? "[dry-run] " : "";
         return ok(
           `${prefix}Exported ${result.noteCount} notes to ${result.format} format at ${result.outDir}:
@@ -14141,14 +14140,14 @@ function inputRequiredRoundsExceededMessage(method, maxRounds) {
   return `Multi-round-trip request '${method}' still required input after ${maxRounds} rounds (inputRequired.maxRounds)`;
 }
 function sleep2(ms, signal) {
-  return new Promise((resolve11, reject) => {
+  return new Promise((resolve10, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof SdkError ? signal.reason : new SdkError(SdkErrorCode.RequestTimeout, String(signal.reason)));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve11();
+      resolve10();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -15962,7 +15961,7 @@ var init_src_Cqbh3MYc = __esm({
         const flowStartedAt = Date.now();
         let onAbort;
         let cleanupMessageId;
-        return new Promise((resolve11, reject) => {
+        return new Promise((resolve10, reject) => {
           const earlyReject = (error2) => {
             reject(error2);
           };
@@ -16031,7 +16030,7 @@ var init_src_Cqbh3MYc = __esm({
             }
             if (decoded.kind === "invalid") return reject(decoded.error);
             if (decoded.kind === "input_required") {
-              if (options?.allowInputRequired === true) return resolve11(manualInputRequiredValue(decoded));
+              if (options?.allowInputRequired === true) return resolve10(manualInputRequiredValue(decoded));
               const flow = {
                 codec,
                 request,
@@ -16043,11 +16042,11 @@ var init_src_Cqbh3MYc = __esm({
                   params
                 }, resultSchema, legOptions)
               };
-              return resolve11(this._resolveNonCompleteResult(decoded, flow));
+              return resolve10(this._resolveNonCompleteResult(decoded, flow));
             }
             const result = decoded.result;
             validateStandardSchema(resultSchema, result).then((parseResult) => {
-              if (parseResult.success) resolve11(parseResult.data);
+              if (parseResult.success) resolve10(parseResult.data);
               else reject(new SdkError(SdkErrorCode.InvalidResult, `Invalid result for ${request.method}: ${parseResult.error}`));
             }, reject);
           });
@@ -18866,7 +18865,7 @@ var init_ajvProvider_CEoC_sr = __esm({
         ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
         const schOrFunc = root.refs[ref];
         if (schOrFunc) return schOrFunc;
-        let _sch = resolve11.call(this, root, ref);
+        let _sch = resolve10.call(this, root, ref);
         if (_sch === void 0) {
           const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
           const { schemaId } = this.opts;
@@ -18892,7 +18891,7 @@ var init_ajvProvider_CEoC_sr = __esm({
       function sameSchemaEnv(s1, s2) {
         return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
       }
-      function resolve11(root, ref) {
+      function resolve10(root, ref) {
         let sch;
         while (typeof (sch = this.refs[ref]) == "string") ref = sch;
         return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
@@ -19342,7 +19341,7 @@ var init_ajvProvider_CEoC_sr = __esm({
         else if (typeof uri === "object") uri = parse2(serialize(uri, options), options);
         return uri;
       }
-      function resolve11(baseURI, relativeURI, options) {
+      function resolve10(baseURI, relativeURI, options) {
         const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
         const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
         schemelessOptions.skipEscape = true;
@@ -19516,7 +19515,7 @@ var init_ajvProvider_CEoC_sr = __esm({
       const fastUri = {
         SCHEMES,
         normalize,
-        resolve: resolve11,
+        resolve: resolve10,
         resolveComponent,
         equal,
         serialize,
@@ -24806,7 +24805,7 @@ var init_stdio = __esm({
       }
       send(message) {
         if (this._closed) return Promise.reject(/* @__PURE__ */ new Error("StdioServerTransport is closed"));
-        return new Promise((resolve11, reject) => {
+        return new Promise((resolve10, reject) => {
           const json = serializeMessage(message);
           let settled = false;
           const onError = (error2) => {
@@ -24821,14 +24820,14 @@ var init_stdio = __esm({
             settled = true;
             this._stdout.off("error", onError);
             this._stdout.off("drain", onDrain);
-            resolve11();
+            resolve10();
           };
           this._stdout.once("error", onError);
           if (this._stdout.write(json)) {
             if (settled) return;
             settled = true;
             this._stdout.off("error", onError);
-            resolve11();
+            resolve10();
           } else if (!settled) this._stdout.once("drain", onDrain);
         });
       }
@@ -24917,8 +24916,8 @@ init_fsutil();
 init_manifest();
 init_vault();
 init_config2();
-import { existsSync as existsSync10, readFileSync as readFileSync14, watch } from "node:fs";
-import { dirname as dirname8, join as join11, resolve as resolve10 } from "node:path";
+import { existsSync as existsSync11, readFileSync as readFileSync14, watch } from "node:fs";
+import { dirname as dirname8, join as join11, resolve as resolve9 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // brain-keeper/src/brains.ts
@@ -24930,7 +24929,7 @@ init_paths();
 init_vault();
 import { spawnSync } from "node:child_process";
 import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync4, lstatSync, mkdirSync as mkdirSync2, mkdtempSync, readFileSync as readFileSync5, readdirSync as readdirSync2, realpathSync, rmSync as rmSync2, statSync as statSync5 } from "node:fs";
+import { existsSync as existsSync4, lstatSync, mkdirSync, mkdtempSync, readFileSync as readFileSync5, readdirSync as readdirSync2, realpathSync, rmSync as rmSync2, statSync as statSync5 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename as basename3, dirname as dirname3, join as join4, relative as relative2 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25124,7 +25123,6 @@ function addBrain(options) {
         writeInto(target, "_about.md", about.generated);
         hashes["_about.md"] = sha1(about.generated);
       }
-      result.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
       record2.brains[folder] = {
         source: source.spec,
         kind: source.kind,
@@ -25136,6 +25134,7 @@ function addBrain(options) {
         files: hashes
       };
       writeSources(options.vaultRoot, record2);
+      result.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
       return compileVault(options.vaultRoot);
     });
     return result;
@@ -25172,7 +25171,7 @@ function checkRoom(vaultRoot, folder) {
 }
 function writeInto(target, file, content) {
   const path = join4(target, file);
-  mkdirSync2(dirname3(path), { recursive: true });
+  mkdirSync(dirname3(path), { recursive: true });
   writeFileAtomic(path, content);
 }
 function mergeEvals(vaultRoot, folder, brainDir) {
@@ -25185,9 +25184,10 @@ function mergeEvals(vaultRoot, folder, brainDir) {
     } catch {
       return 0;
     }
+    if (!suite || typeof suite !== "object" || Array.isArray(suite) || !Array.isArray(suite.evals ?? [])) return 0;
   }
   const prefix = `${folder}/`;
-  const kept = (suite.evals ?? []).filter((entry) => !entry.id.startsWith(prefix));
+  const kept = (suite.evals ?? []).filter((entry) => !(typeof entry?.id === "string" && entry.id.startsWith(prefix)));
   let added = [];
   if (existsSync4(incoming)) {
     try {
@@ -25257,7 +25257,6 @@ function updateBrains(options) {
           if (!upstream.has(file) && file !== "_about.md") update.removedUpstream.push(file);
         }
         if (!dryRun) {
-          update.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
           record2.brains[folder] = {
             ...installed,
             commit: fetched.commit,
@@ -25265,6 +25264,7 @@ function updateBrains(options) {
             updatedAt: (options.now?.() ?? /* @__PURE__ */ new Date()).toISOString(),
             files: hashes
           };
+          update.evals = mergeEvals(options.vaultRoot, folder, fetched.dir);
         }
       } catch (error2) {
         update.error = error2.message;
@@ -25368,7 +25368,7 @@ init_env();
 init_fsutil();
 init_manifest();
 init_vault();
-import { copyFileSync, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync6 } from "node:fs";
+import { copyFileSync, existsSync as existsSync5, mkdirSync as mkdirSync2, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync6 } from "node:fs";
 import { dirname as dirname4, join as join5, relative as relative3, resolve as resolve5 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here2 = dirname4(fileURLToPath2(import.meta.url));
@@ -25412,7 +25412,7 @@ function copyMissing(from, to, root, dryRun) {
     const source = join5(from, name);
     const target = join5(to, name);
     if (statSync6(source).isDirectory()) {
-      if (!dryRun) mkdirSync3(target, { recursive: true });
+      if (!dryRun) mkdirSync2(target, { recursive: true });
       copied.push(...copyMissing(source, target, root, dryRun));
     } else if (!existsSync5(target)) {
       if (!dryRun) copyFileSync(source, target);
@@ -25426,7 +25426,7 @@ function initVault(options) {
   const dryRun = options.dryRun === true;
   const vaultRoot = resolveUserPath(options.dir, options.cwd ?? process.cwd());
   const created = [];
-  if (!dryRun) mkdirSync3(vaultRoot, { recursive: true });
+  if (!dryRun) mkdirSync2(vaultRoot, { recursive: true });
   const run = () => {
     if (options.example) created.push(...copyMissing(EXAMPLE_VAULT, vaultRoot, vaultRoot, dryRun));
     const fallback = join5(vaultRoot, "general_instructions.md");
@@ -25466,7 +25466,7 @@ function initVault(options) {
       }
     }
     if (!dryRun) {
-      mkdirSync3(dirname4(configPath), { recursive: true });
+      mkdirSync2(dirname4(configPath), { recursive: true });
       writeFileAtomic(configPath, JSON.stringify({ ...current, vaultRoot }, null, 2) + "\n");
     }
   }
@@ -25492,7 +25492,7 @@ List folders that are not part of the brain (Templates, Attachments\u2026) in ${
 
 // brain-keeper/bin/brain-keeper.ts
 init_tools();
-var KEEPER_ROOT = resolve10(dirname8(fileURLToPath4(import.meta.url)), "..");
+var KEEPER_ROOT = resolve9(dirname8(fileURLToPath4(import.meta.url)), "..");
 var USAGE = `
 brain-keeper <command> [options]
 
@@ -25523,6 +25523,7 @@ Options
   --limit <n>               Most search results (default 10)
   --expect <id>             Expected destination for the last check prompt
   --dry-run                 For rebuild, init, add, update and export: report without writing
+  --overwrite               For export: replace existing files it did not write itself
   --example                 For init: include the example notes
   --starter <source>        For init: add a shared brain too, e.g. --starter python-backend
   --as <folder>             For add: the vault folder to put the brain in (default: its name)
@@ -25607,7 +25608,7 @@ async function main2() {
       });
       process.stdout.write(renderInit(result) + "\n");
       if (typeof args.flags.starter === "string") {
-        const added = addBrain({ vaultRoot: result.vaultRoot, source: args.flags.starter, dryRun: dryRun || !existsSync10(result.vaultRoot) });
+        const added = addBrain({ vaultRoot: result.vaultRoot, source: args.flags.starter, dryRun: dryRun || !existsSync11(result.vaultRoot) });
         process.stdout.write("\n" + renderAdd(added) + "\n");
       }
       return 0;
@@ -25721,7 +25722,7 @@ async function main2() {
       const fmt = typeof args.flags.format === "string" ? args.flags.format : "cursor";
       const out = typeof args.flags.out === "string" ? args.flags.out : void 0;
       const dryRun = args.flags["dry-run"] === true;
-      const res = await runTool(tool, config2, { format: fmt, outputDir: out, dryRun });
+      const res = await runTool(tool, config2, { format: fmt, outputDir: out, dryRun, overwrite: args.flags.overwrite === true });
       if (res.isError) {
         process.stderr.write(`${res.text}
 `);
@@ -25761,7 +25762,7 @@ ${USAGE}
   }
 }
 function setupText() {
-  const launcher = resolve10(KEEPER_ROOT, "bin", "brain-keeper.mjs");
+  const launcher = resolve9(KEEPER_ROOT, "bin", "brain-keeper.mjs");
   const commands = join11(KEEPER_ROOT, "commands", "brain-*.md");
   const config2 = loadConfig2();
   const quote2 = (path) => /\s/.test(path) ? `"${path}"` : path;

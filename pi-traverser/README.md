@@ -222,7 +222,9 @@ prompt itself. `/duker-brain:status` prints what it last saw.
 
 Resolved from defaults, then `~/.config/brain-traverse/config.json` (the user
 file `brain-keeper init` writes), then `./brain-traverse.config.json` or
-`$BRAIN_CONFIG`, then `BRAIN_*` environment variables. A relative `vaultRoot`
+`$BRAIN_CONFIG`, then `BRAIN_*` environment variables. `./brain-traverse.config.json`
+may not set `decisionsUrl`, `decisionsPath`, `apiKey` or `routeLog`, since it
+arrives with any repository you clone. A relative `vaultRoot`
 in a file resolves against that file's directory, and `~` is expanded. Copy
 [config.example.json](../config.example.json) to start.
 

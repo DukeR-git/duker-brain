@@ -147,7 +147,7 @@ export default function brainKeeper(pi: PiExtensionAPI, options: KeeperExtension
 	});
 
 	pi.registerCommand("brain-export", {
-		description: "Export vault rules to external formats: /brain-export <cursor|windsurf|aider|bundle> [outDir] [--dry-run]",
+		description: "Export vault rules to external formats: /brain-export <cursor|windsurf|aider|bundle> [outDir] [--dry-run] [--overwrite]",
 		handler: async (args, ctx) => {
 			const parts = args.trim().split(/\s+/).filter(Boolean);
 			const fmt = (parts.find((p) => !p.startsWith("--")) ?? "cursor") as any;
@@ -160,7 +160,7 @@ export default function brainKeeper(pi: PiExtensionAPI, options: KeeperExtension
 			const dryRun = parts.includes("--dry-run");
 			try {
 				const tool = TOOLS.find((t) => t.name === "brain_export")!;
-				const result = await runTool(tool, config.get(), { format: fmt, outputDir: outDir, dryRun });
+				const result = await runTool(tool, config.get(), { format: fmt, outputDir: outDir, dryRun, overwrite: parts.includes("--overwrite") });
 				ctx.ui.notify(result.text, result.isError ? "error" : "info");
 			} catch (error) {
 				ctx.ui.notify(`brain-export failed: ${(error as Error).message}`, "error");

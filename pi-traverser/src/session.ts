@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 
 import type { TraversalDocument, TraversalResult } from "../../brain-core/src/types.js";
-import { formatInjection, formatReminder } from "./inject.js";
+import { formatInjection, formatReminder, resultDocuments } from "./inject.js";
 
 /** A guide already in the conversation: the turn it went in, and a hash of what was sent. */
 export interface InjectedGuide {
@@ -26,10 +26,6 @@ export interface InjectionPlan {
 	repeat: boolean;
 	/** The guides in this result, reminders included. */
 	documents: TraversalDocument[];
-}
-
-export function resultDocuments(result: TraversalResult): TraversalDocument[] {
-	return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
 }
 
 /**

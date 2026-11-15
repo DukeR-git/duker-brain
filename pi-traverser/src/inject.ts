@@ -12,6 +12,11 @@ import type { TraversalDocument, TraversalResult } from "../../brain-core/src/ty
 
 export const CUSTOM_TYPE = "brain-traverse";
 
+/** A result's guides: the composite list, else the single document, else none. */
+export function resultDocuments(result: TraversalResult): TraversalDocument[] {
+	return result.documents && result.documents.length > 0 ? result.documents : result.document ? [result.document] : [];
+}
+
 function formatSingleDocument(
 	document: TraversalDocument,
 	provenance: string,
@@ -38,12 +43,7 @@ function formatSingleDocument(
  * something to obey.
  */
 export function formatInjection(result: TraversalResult): string | null {
-	const docs =
-		result.documents && result.documents.length > 0
-			? result.documents
-			: result.document
-				? [result.document]
-				: [];
+	const docs = resultDocuments(result);
 	if (docs.length === 0) return null;
 
 	if (docs.length === 1) {
@@ -71,21 +71,8 @@ export function formatInjection(result: TraversalResult): string | null {
  * a long session on one topic does not carry the same document ten times over.
  */
 export function formatReminder(result: TraversalResult, turnsAgo: number): string | null {
-	const docs =
-		result.documents && result.documents.length > 0
-			? result.documents
-			: result.document
-				? [result.document]
-				: [];
+	const docs = resultDocuments(result);
 	if (docs.length === 0) return null;
-
-	if (docs.length === 1) {
-		const document = docs[0];
-		return (
-			`[Reference Guide: ${document.title} — already provided ${turnsAgo} turn(s) ago (Source: ${document.path}); ` +
-			`it still applies to this prompt.]`
-		);
-	}
 
 	return docs
 		.map(
@@ -107,12 +94,7 @@ export function formatTrace(result: TraversalResult): string {
 	if (hops) parts.push(hops);
 	parts.push(`${Math.round(result.totalMs)}ms total`);
 
-	const docs =
-		result.documents && result.documents.length > 0
-			? result.documents
-			: result.document
-				? [result.document]
-				: [];
+	const docs = resultDocuments(result);
 	if (docs.length > 1) {
 		parts.push(docs.map((d) => d.path).join(" + "));
 	} else if (docs.length === 1) {
@@ -132,12 +114,7 @@ export function formatStatus(result: TraversalResult): string {
 		case "leaf":
 			return `brain: ${result.document?.id ?? "?"} ${result.minConfidence.toFixed(2)}${cacheTag} ${Math.round(result.totalMs)}ms`;
 		case "composite": {
-			const docs =
-				result.documents && result.documents.length > 0
-					? result.documents
-					: result.document
-						? [result.document]
-						: [];
+			const docs = resultDocuments(result);
 			const ids = docs.map((d) => d.id).join("+");
 			return `brain: ${ids} ${result.minConfidence.toFixed(2)}${cacheTag} ${Math.round(result.totalMs)}ms`;
 		}
