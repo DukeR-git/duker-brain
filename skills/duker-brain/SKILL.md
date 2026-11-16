@@ -1,6 +1,24 @@
 ---
 name: duker-brain
 description: Use the duker-brain MCP server (brain_* tools) as project memory kept in an Obsidian vault. Use before answering any project- or domain-specific question (conventions, architecture, library gotchas, past decisions) to fetch the note that applies, and whenever creating, editing or reorganising notes in the vault.
+summary: Dynamic context routing and hierarchical Obsidian vault memory for coding agents via the duker-brain MCP server.
+version: 1.0.0
+tags:
+  - context-routing
+  - obsidian
+  - project-memory
+  - mcp
+  - coding-agents
+keywords:
+  - duker-brain
+  - brain-keeper
+  - brain-traverse
+  - obsidian-vault
+use_cases:
+  - Route project and domain questions through an Obsidian vault in two hops to fetch only the relevant guide
+  - Author, split, and maintain routable engineering notes with sibling-discriminating criteria
+  - Validate vault health and verify routing accuracy with brain_doctor and brain_check_routing
+docs_url: https://github.com/DukeR-git/duker-brain
 ---
 
 # duker-brain
@@ -12,8 +30,14 @@ Two things follow, and the rules below are those two things spelled out: a note
 is only as findable as its criteria, and a folder is only as routable as it is
 small.
 
-This skill needs the `brain` MCP server. If the `brain_*` tools are missing,
-the setup is one file: [mcp.json](mcp.json).
+This skill needs the `brain` MCP server (Node.js >= 22). If the `brain_*` tools
+are missing, create or adopt a vault first so the `npx` cache is warm:
+
+```bash
+npx -y --package=github:DukeR-git/duker-brain brain-keeper init ~/brain --starter python-backend
+```
+
+Then add the server from [mcp.json](mcp.json) to the client's MCP config.
 
 ## Before answering: query the brain
 
